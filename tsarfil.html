@@ -55,6 +55,15 @@
   }
   header h1 { margin: 0; font-size: 22px; letter-spacing: .08em; }
   header span { color: var(--muted); font-size: 12px; }
+  /* 自分の陣営の表示 */
+  .side-badge {
+    margin-left: auto; align-self: center;
+    padding: 6px 14px; border-radius: 999px;
+    font-size: 15px; font-weight: 700; letter-spacing: .05em;
+    box-shadow: 0 1px 3px rgba(0,0,0,.3);
+  }
+  .side-badge.w { background: var(--w-fill); color: var(--w-text); border: 2px solid #9c8b70; }
+  .side-badge.b { background: var(--b-fill); color: var(--b-text); border: 2px solid #000; }
   main {
     display: flex; gap: 16px; padding: 12px 16px 24px;
     align-items: flex-start; flex-wrap: wrap; justify-content: center;
@@ -94,6 +103,13 @@
     inset: 0; width: auto; height: auto; border-radius: 0;
     background: var(--capture);
   }
+  /* レックスが動くと取られうるマス：青い点より少し大きい赤丸（駒の上に重ねる） */
+  .cell.target.risky::before {
+    content: ""; position: absolute; z-index: 2; width: 46%; height: 46%;
+    border-radius: 50%; background: var(--danger); opacity: .85;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, .7); pointer-events: none;
+  }
+  .cell.target.risky:not(.capture)::after { display: none; }
   .cell.danger { box-shadow: inset 0 0 0 3px var(--danger); }
   /* 駒は種類ごとに外形の異なるSVG */
   .piece {
@@ -130,6 +146,8 @@
   .chip.b { background: var(--b-fill); border: 1.5px solid #000; }
   .sub { color: var(--muted); font-size: 12px; margin-top: 4px; min-height: 1.2em; }
   .sub.warn { color: var(--danger); font-weight: 700; }
+  .score { margin-top: 6px; font-size: 13px; line-height: 1.6; font-variant-numeric: tabular-nums; }
+  .score .chip { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 2px; vertical-align: -1px; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .row + .row { margin-top: 8px; }
   input[type="text"] { width: 110px; cursor: text; }
@@ -185,7 +203,7 @@
   .parade { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: 560px; }
   .parade .piece { width: 40px; height: 40px; }
   .home-cards {
-    width: min(100%, 640px);
+    width: min(100%, 900px);
     display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px;
   }
   .home-cards .card h2 { font-size: 16px; color: var(--text); }
@@ -238,7 +256,28 @@
         <input type="text" id="roomInput" inputmode="numeric" maxlength="8" placeholder="部屋番号">
         <button class="primary" id="joinBtn">入室</button>
       </div>
-      <div class="sub" id="homeMsg">相手と同じ部屋番号（数字1〜8桁）を入力してください。色と先手はランダムで決まります。</div>
+      <div class="sub"><strong>相手と同じ部屋番号（数字1〜8桁）を入力してください。</strong>色と先手はランダムで決まります。</div>
+      <div class="sub" id="homeMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>CPU vs CPU（観戦）</h2>
+      <div class="row">
+        <select id="watchWhiteSel" title="白のCPUの強さ">
+          <option value="easy">白：よわい</option>
+          <option value="normal" selected>白：ふつう</option>
+          <option value="hard">白：つよい</option>
+        </select>
+        <select id="watchBlackSel" title="黒のCPUの強さ">
+          <option value="easy">黒：よわい</option>
+          <option value="normal" selected>黒：ふつう</option>
+          <option value="hard">黒：つよい</option>
+        </select>
+      </div>
+      <div class="row">
+        <button class="primary" id="watchStartBtn">観戦する</button>
+      </div>
+      <div class="sub">CPU同士の対戦を眺めます。速さの変更や一時停止は対局中にできます。</div>
     </div>
   </div>
 
@@ -254,7 +293,8 @@
 <div id="playScreen" hidden>
 <header>
   <h1>ツァーフィル</h1>
-  <span>13×13 トーラス盤・CPU対戦／オンライン対戦 ／ 盤の端は反対側とつながっています（点線）</span>
+  <span id="headerSub"></span>
+  <div class="side-badge" id="sideBadge" hidden></div>
 </header>
 <main>
   <div class="board-wrap">
@@ -266,34 +306,40 @@
   </div>
 
   <aside>
+    <!-- 1. 手番と操作 -->
     <div class="card">
       <div class="status" id="status"></div>
       <div class="sub" id="substatus"></div>
+      <div class="score" id="scoreLine"></div>
       <div class="row" style="margin-top:10px">
         <button id="passBtn">パス</button>
         <button id="undoBtn">一手戻す</button>
-        <button id="flipBtn">盤を反転</button>
-        <button class="bgm-toggle"></button>
-        <button class="se-toggle"></button>
+        <!-- 観戦のときだけ出す -->
+        <button id="pauseBtn" hidden>一時停止</button>
+        <select id="speedSel" title="進む速さ" hidden>
+          <option value="slow">速さ：ゆっくり</option>
+          <option value="normal" selected>速さ：ふつう</option>
+          <option value="fast">速さ：はやい</option>
+        </select>
+        <button class="primary" id="rematchBtn" hidden>再戦</button>
+      </div>
+      <!-- オンライン対戦で相手から「一手戻す」を申し込まれたときに出す -->
+      <div id="undoPrompt" hidden>
+        <div class="sub warn">相手が「一手戻す」を申し込んでいます。</div>
+        <div class="row" style="margin-top:6px">
+          <button class="primary" id="undoAcceptBtn">OK</button>
+          <button id="undoRejectBtn">断る</button>
+        </div>
       </div>
     </div>
 
-    <div class="card">
-      <h2 id="gameTitle">対局</h2>
-      <div class="row">
-        <button id="newBtn">新しい対局</button>
-        <button id="rematchBtn">再戦</button>
-        <button id="rulesBtn2">ルール</button>
-        <button id="homeBtn">ホームへ戻る</button>
-      </div>
-      <div class="sub" id="onlineMsg"></div>
-    </div>
-
+    <!-- 2. 駒の情報 -->
     <div class="card">
       <h2>駒の情報</h2>
       <div id="info" class="note">駒にカーソルを合わせるか選択すると、動き方を表示します。</div>
     </div>
 
+    <!-- 3. 持ち駒 -->
     <div class="card">
       <h2>持ち駒</h2>
       <div class="note" id="handMineLabel"></div>
@@ -302,16 +348,30 @@
       <div class="hand" id="handOpp"></div>
     </div>
 
+    <!-- 4. 対局の種類と設定 -->
+    <div class="card">
+      <h2 id="gameTitle">対局</h2>
+      <div class="row">
+        <button class="bgm-toggle"></button>
+        <button class="se-toggle"></button>
+        <button id="homeBtn">ホームへ戻る</button>
+        <button id="rulesBtn2">ルール</button>
+      </div>
+      <div class="sub" id="onlineMsg"></div>
+    </div>
+
+    <!-- 5. 棋譜 -->
     <div class="card">
       <h2>棋譜</h2>
       <ol class="log" id="log"></ol>
     </div>
 
+    <!-- 6. 補足 -->
     <div class="card note">
-      ※初期配置はルール未決定のため仮配置です（コード先頭の <code>SETUP</code> で変更可）。<br>
-      ※取った駒は持ち駒になり、自分の手番に1手として盤に置けます。置けるのは敵陣（相手の初期配置の4段）以外の空きマスです。<br>
+      ※初期配置は案B「真ん中を固める」を採用しています（コードの <code>SETUP</code> で変更可）。<br>
+      ※取った駒は2分の1の確率で持ち駒になり、自分の手番に1手として盤に置けます。置けるのは敵陣（相手の初期配置の4段）以外の空きマスです。<br>
       ※一周して元のマスに戻る移動はパスと同じ結果になるため、「パス」ボタンで代用しています。<br>
-      ※オンライン対戦は server.js を起動し、http://localhost:3000 から開いたときに使えます。オンラインでは「一手戻す」は使えません。
+      ※オンライン対戦は server.js を起動し、http://localhost:3000 から開いたときに使えます。オンラインで「一手戻す」をするには相手のOKが必要です。
     </div>
   </aside>
 </main>
@@ -322,12 +382,16 @@
   <h2>ルール</h2>
   <ul class="rules-list">
     <li>盤は13×13マス。上下左右の端は反対側とつながっています（ドーナツ状）。端を越えた先も移動距離に数えます。</li>
+    <li>ただし、レックス・ライター・ヴェヒター・トルヴェヒターは上下の端を越えられません（斜めに上下の端を越える移動もできません）。左右の端は越えられます。</li>
     <li>各プレイヤーは52個の駒を持ちます。先手はランダムで決まります。</li>
     <li>自分の手番には「駒を1つ動かす」「持ち駒を1つ置く」「パス」のどれかをします。</li>
     <li>移動先に敵駒があれば取れます。味方の駒があるマスには入れません。</li>
     <li>長い距離を動く駒も、途中の駒を飛び越えられません。途中に敵駒があれば、そこで取って止まります。</li>
-    <li>取った駒は持ち駒になり、敵陣（相手の初期配置の4段）以外の空きマスに置けます。</li>
+    <li>取った駒は2分の1の確率で持ち駒になり、敵陣（相手の初期配置の4段）以外の空きマスに置けます。持ち駒にならなかった駒は盤から消えます。</li>
+    <li>レックスを選ぶと、動いた先で相手に取られうるマスに大きめの赤丸が付きます。</li>
     <li>レックスは攻撃されているマスにも入れます。レックスを取った側の勝ちで、引き分けはありません。</li>
+    <li>双方にポイントがあります。駒を取ると駒の価値の分プラス、取られると同じだけマイナスになります（ライター9・レヒター5・リッター4・ヴィンケル4・シュッツ3・トルヴェヒター3・ヴェヒター2・フェスト2・ビーゲン2・ゾルダート1）。</li>
+    <li>500手に達しても決着がつかなければ、ポイントの多い側の勝ちです。同点なら、差がつくかレックスが取られるまで続けます。</li>
   </ul>
   <h3>駒の動き（図は上が前方。● 1マス移動 ／ 青帯 任意距離 ／ × 捕獲のみ）</h3>
   <div id="rulesPieces"></div>
@@ -346,14 +410,15 @@ const FILES = "abcdefghijklm";
 
 // ---------- 駒の定義 ----------
 // 方向は [dx, 前方方向のdy]。r: 最大距離（N=任意距離）, m: 'n'=移動・捕獲, 'c'=捕獲のみ
+// noVWrap: true の駒は上下の端を越えられない（斜め移動で上下の端を越える場合も含む。左右の端は越えられる）
 const ORTH = [[0,1],[0,-1],[1,0],[-1,0]];
 const DIAG = [[1,1],[-1,1],[1,-1],[-1,-1]];
 const ALL8 = ORTH.concat(DIAG);
 
 const TYPES = {
   rex:      { name: "レックス",       short: "レク", value: 1000,
-              desc: "縦・横・斜めの8方向に1マス。取られると敗北。",
-              moves: [{ d: ALL8, r: 1, m: "n" }] },
+              desc: "縦・横・斜めの8方向に1マス。取られると敗北。上下の端は越えられない。",
+              moves: [{ d: ALL8, r: 1, m: "n" }], noVWrap: true },
   ritter:   { name: "リッター",       short: "リッ", value: 4,
               desc: "前方・前方斜め左右の3方向に任意の距離。",
               moves: [{ d: [[0,1],[1,1],[-1,1]], r: N, m: "n" }] },
@@ -364,8 +429,8 @@ const TYPES = {
               desc: "左右方向に任意の距離。",
               moves: [{ d: [[1,0],[-1,0]], r: N, m: "n" }] },
   reiter:   { name: "ライター",       short: "ライ", value: 9,
-              desc: "縦・横・斜めの8方向に任意の距離。",
-              moves: [{ d: ALL8, r: N, m: "n" }] },
+              desc: "縦・横・斜めの8方向に任意の距離。上下の端は越えられない。",
+              moves: [{ d: ALL8, r: N, m: "n" }], noVWrap: true },
   rechter:  { name: "レヒター",       short: "レヒ", value: 5,
               desc: "上下左右の4方向に任意の距離。",
               moves: [{ d: ORTH, r: N, m: "n" }] },
@@ -373,11 +438,11 @@ const TYPES = {
               desc: "斜め4方向に任意の距離。",
               moves: [{ d: DIAG, r: N, m: "n" }] },
   waechter: { name: "ヴェヒター",     short: "ヴェ", value: 2,
-              desc: "上下左右に、敵駒がいる時のみ最大2マス移動して捕獲（2マス先なら途中は空き必須）。",
-              moves: [{ d: ORTH, r: 2, m: "c" }] },
+              desc: "上下左右に、敵駒がいる時のみ最大2マス移動して捕獲（2マス先なら途中は空き必須）。上下の端は越えられない。",
+              moves: [{ d: ORTH, r: 2, m: "c" }], noVWrap: true },
   torw:     { name: "トルヴェヒター", short: "トル", value: 3,
-              desc: "上下左右に敵駒がいる時のみ最大2マス捕獲。斜め4方向は敵駒がいる時のみ1マス捕獲。",
-              moves: [{ d: ORTH, r: 2, m: "c" }, { d: DIAG, r: 1, m: "c" }] },
+              desc: "上下左右に敵駒がいる時のみ最大2マス捕獲。斜め4方向は敵駒がいる時のみ1マス捕獲。上下の端は越えられない。",
+              moves: [{ d: ORTH, r: 2, m: "c" }, { d: DIAG, r: 1, m: "c" }], noVWrap: true },
   fest:     { name: "フェスト",       short: "フェ", value: 2,
               desc: "前方・前方斜め左右・後方・後方斜め左右の6方向に1マス。左右には動けない。",
               moves: [{ d: [[0,1],[1,1],[-1,1],[0,-1],[1,-1],[-1,-1]], r: 1, m: "n" }] },
@@ -386,15 +451,17 @@ const TYPES = {
               moves: [{ d: [[1,0],[-1,0],[1,1],[-1,1],[1,-1],[-1,-1]], r: 1, m: "n" }] },
 };
 
-// ---------- 仮の初期配置（白側。黒は盤の中心で180度回転） ----------
+// ---------- 初期配置（白側。黒は盤の中心で180度回転） ----------
 // y=1（後方）→ y=4（前方）。各行13マス、左(a)から右(m)。
 // X=レックス R=リッター Z=ゾルダート S=シュッツ E=ライター H=レヒター
 // V=ヴィンケル W=ヴェヒター T=トルヴェヒター F=フェスト B=ビーゲン
+// 案B「真ん中を固める」：レックスの前後を守りの駒で囲み、真ん中の列をリッターの通り道にしない。
+// 最後列には後ろ向きに長く動ける駒（レヒター・ライター・ヴィンケル）を置かない（端を越えて初手で取り合わないように）
 const SETUP = {
-  1: "WFBTFBFBFTBFW",
-  2: "HSVETWXWTEVSH",
-  3: "RVSEVHRHVESVR",
-  4: "ZZZZZZRZZZZZZ",
+  1: "SBFWTFRFTWFBS",
+  2: "RHVEBWXWBEVHR",
+  3: "HSVETVRVTEVSH",
+  4: "ZZZZZZFZZZZZZ",
 };
 const CODE = { X: "rex", R: "ritter", Z: "soldat", S: "schutz", E: "reiter", H: "rechter",
                V: "winkel", W: "waechter", T: "torw", F: "fest", B: "biegen" };
@@ -427,7 +494,9 @@ function pieceMoves(b, x, y) {
     for (const [dx, df] of g.d) {
       const dy = df * fwd;
       for (let k = 1; k <= g.r; k++) {
-        const tx = wrap(x + dx * k), ty = wrap(y + dy * k);
+        const ry = y + dy * k;
+        if (TYPES[p.t].noVWrap && (ry < 0 || ry >= N)) break;   // 上下の端は越えられない
+        const tx = wrap(x + dx * k), ty = wrap(ry);
         if (tx === x && ty === y) break;          // 一周して元のマス（パスと同じなので除外）
         const q = b[idx(tx, ty)];
         if (!q) {
@@ -642,7 +711,7 @@ function playSound(name) {
 function playTurnSounds(base) {
   playSound(base);
   if (S.winner) {
-    const lost = S.winner !== humanColor;
+    const lost = mode !== "watch" && S.winner !== humanColor;   // 観戦では勝敗どちらでもファンファーレ
     setTimeout(() => playSound(lost ? "lose" : "win"), 250);
     return;
   }
@@ -772,11 +841,16 @@ let selected = null;      // 選択中の盤上の駒 {x, y}
 let selectedDrop = null;  // 選択中の持ち駒の種類
 let targets = [];
 let flipped = false;
-let mode = "cpu";         // "cpu" | "online"
-let humanColor = "w";     // あなたの色
+let mode = "cpu";         // "cpu" | "online" | "watch"（CPU vs CPU の観戦）
+let humanColor = "w";     // あなたの色（観戦では手前に表示する白）
 let cpuLevel = "easy";
 let cpuTimer = null;
 let hoverInfo = null;
+
+// 観戦の設定。levels: 白・黒それぞれのCPUの強さ, speed: 1手ごとの間隔
+const LEVEL_NAME = { easy: "よわい", normal: "ふつう", hard: "つよい" };
+const SPEED_MS = { slow: 1200, normal: 600, fast: 150 };
+let watch = { levels: { w: "normal", b: "normal" }, speed: "normal", paused: false };
 
 // オンライン対戦の状態。status: "idle" | "waiting"（相手待ち） | "playing" | "left"（相手が退室）
 let socket = null;
@@ -788,7 +862,8 @@ const cells = [];
 
 function snapshot() {
   return { board: S.board.slice(), turn: S.turn, hand: { w: [...S.hand.w], b: [...S.hand.b] },
-           log: [...S.log], last: S.last, winner: S.winner, first: S.first };
+           log: [...S.log], last: S.last, winner: S.winner, first: S.first,
+           points: { ...S.points }, winReason: S.winReason };
 }
 
 function clearSelection() {
@@ -796,7 +871,18 @@ function clearSelection() {
 }
 
 function freshState(first) {
-  return { board: initialBoard(), turn: first, hand: { w: [], b: [] }, log: [], last: null, winner: null, first };
+  return { board: initialBoard(), turn: first, hand: { w: [], b: [] }, log: [], last: null, winner: null, first,
+           points: { w: 0, b: 0 }, winReason: null };   // winReason: "rex"（レックスを取った）| "points"（ポイント判定）
+}
+
+// ポイント判定：この手数に達しても決着がつかなければ、ポイントの多い側の勝ち（同点なら差がつくまで続ける）
+const POINT_JUDGE_PLY = 500;
+const fmtPoint = v => (v > 0 ? `+${v}` : `${v}`);
+
+function checkPointJudge() {
+  if (S.winner || S.log.length < POINT_JUDGE_PLY || S.points.w === S.points.b) return;
+  S.winner = S.points.w > S.points.b ? "w" : "b";
+  S.winReason = "points";
 }
 
 // CPU対戦を始める
@@ -814,18 +900,49 @@ function newGame() {
   maybeCpu();
 }
 
+// CPU vs CPU の観戦を始める
+function newWatchGame() {
+  clearTimeout(cpuTimer);
+  leaveRoom();
+  mode = "watch";
+  humanColor = "w";
+  watch.levels = { w: $("watchWhiteSel").value, b: $("watchBlackSel").value };
+  watch.paused = false;
+  S = freshState(Math.random() < 0.5 ? "w" : "b");
+  undoStack = [];
+  clearSelection();
+  flipped = false;
+  render();
+  maybeCpu();
+}
+
 function isCpuTurn() {
-  return mode === "cpu" && S.turn !== humanColor && !S.winner;
+  if (S.winner) return false;
+  if (mode === "watch") return !watch.paused;
+  return mode === "cpu" && S.turn !== humanColor;
 }
 
-// あなたが操作できるか
+// あなたが操作できるか（観戦中は操作できない）
 function canAct() {
-  return !S.winner && S.turn === humanColor && (mode === "cpu" || online.status === "playing");
+  return !S.winner && S.turn === humanColor
+    && (mode === "cpu" || (mode === "online" && online.status === "playing" && !online.pending));
 }
 
-// remote: オンライン対戦で相手から届いた手なら true
+// 取った駒が持ち駒になる確率
+const KEEP_RATE = 0.5;
+
+// remote: サーバーから届いた手なら true。
+// オンライン対戦では自分の手もすぐには反映せず、サーバーが「持ち駒になるか」を決めて
+// 2人に同時に送り返してきたときに反映する（2人の盤面が必ず同じになるように）
 function doMove(m, remote = false) {
-  if (mode === "online" && !remote) socket.emit("move", m);
+  if (mode === "online" && !remote) {
+    socket.emit("move", m);
+    online.pending = true;
+    clearSelection();
+    render();
+    return;
+  }
+  if (mode === "online") { online.undo = null; online.pending = false; }   // 手が進んだら「一手戻す」の申し込みは取り消し
   undoStack.push(snapshot());
   const p = m.drop ? { t: m.drop, c: m.c } : S.board[idx(m.fx, m.fy)];
   const cap = m.drop ? null : S.board[idx(m.tx, m.ty)];
@@ -836,12 +953,19 @@ function doMove(m, remote = false) {
     ? `${colorName(p.c)} ${TYPES[p.t].name} 打 ${sqName(m.tx, m.ty)}`
     : `${colorName(p.c)} ${TYPES[p.t].name} ${sqName(m.fx, m.fy)}→${sqName(m.tx, m.ty)}`;
   if (cap) {
-    S.hand[p.c].push(cap.t);
     text += ` ×${TYPES[cap.t].name}`;
+    if (cap.t !== "rex") {
+      S.points[p.c] += TYPES[cap.t].value;     // 取った側は駒の価値の分プラス
+      S.points[cap.c] -= TYPES[cap.t].value;   // 取られた側は同じだけマイナス
+      const keep = m.keep ?? Math.random() < KEEP_RATE;   // オンラインはサーバーが決めた結果を使う
+      if (keep) S.hand[p.c].push(cap.t);
+      text += keep ? "（持ち駒に）" : "（持ち駒にならず）";
+    }
   }
   S.log.push({ text, cap: !!cap });
-  if (cap && cap.t === "rex") S.winner = p.c;
+  if (cap && cap.t === "rex") { S.winner = p.c; S.winReason = "rex"; }
   else S.turn = other(S.turn);
+  checkPointJudge();
   clearSelection();
   render();
   playTurnSounds(cap ? "capture" : "move");
@@ -849,34 +973,59 @@ function doMove(m, remote = false) {
 }
 
 function doPass(remote = false) {
-  if (mode === "online" && !remote) socket.emit("pass");
+  if (mode === "online" && !remote) {
+    socket.emit("pass");
+    online.pending = true;
+    clearSelection();
+    render();
+    return;
+  }
+  if (mode === "online") { online.undo = null; online.pending = false; }
   undoStack.push(snapshot());
   S.log.push({ text: `${colorName(S.turn)} パス`, cap: false });
   S.last = null;
   S.turn = other(S.turn);
+  checkPointJudge();
   clearSelection();
   render();
   playTurnSounds("pass");
   maybeCpu();
 }
 
-function undo() {
-  if (mode === "online" || !undoStack.length) return;
-  clearTimeout(cpuTimer);
+// color の手番まで戻せるか
+const canUndoTo = color => undoStack.some(s => s.turn === color);
+
+// color の手番になるところまで盤面を戻す
+function rollbackTo(color) {
   S = undoStack.pop();
-  // あなたの手番まで戻す
-  while (S.turn !== humanColor && undoStack.length) S = undoStack.pop();
+  while (S.turn !== color && undoStack.length) S = undoStack.pop();
   clearSelection();
   render();
+}
+
+// CPU対戦ではすぐ戻す。オンライン対戦では相手に申し込み、OKが出たら戻す
+function undo() {
+  if (mode === "online") {
+    if (online.status !== "playing" || online.undo || !canUndoTo(humanColor)) return;
+    socket.emit("undo-request");
+    online.undo = "sent";
+    setOnlineMsg("「一手戻す」を申し込みました。相手のOKを待っています。");
+    render();
+    return;
+  }
+  if (!undoStack.length) return;
+  clearTimeout(cpuTimer);
+  rollbackTo(humanColor);
   maybeCpu();
 }
 
 function maybeCpu() {
   if (!isCpuTurn()) return;
+  const level = mode === "watch" ? watch.levels[S.turn] : cpuLevel;
   cpuTimer = setTimeout(() => {
-    const m = cpuChoose(S.board, S.turn, cpuLevel, S.hand[S.turn]);
+    const m = cpuChoose(S.board, S.turn, level, S.hand[S.turn]);
     m ? doMove(m) : doPass();
-  }, 350);
+  }, mode === "watch" ? SPEED_MS[watch.speed] : 350);
 }
 
 function onCellClick(x, y) {
@@ -888,6 +1037,9 @@ function onCellClick(x, y) {
     clearSelection();
     selected = { x, y };
     targets = pieceMoves(S.board, x, y);
+    // レックスは、動いた先で相手に取られうるマスに印を付ける
+    if (p.t === "rex")
+      targets = targets.map(m => ({ ...m, risky: isAttacked(applyMove(S.board, m), m.tx, m.ty, other(p.c)) }));
     playSound("select");
   } else {
     clearSelection();
@@ -932,7 +1084,7 @@ function connectSocket() {
   socket.on("start", ({ color, first }) => {
     clearTimeout(cpuTimer);
     mode = "online";
-    online.status = "playing";
+    online = { room: online.room, status: "playing", undo: null, rematchSent: false, pending: false };
     humanColor = color;
     S = freshState(first);
     undoStack = [];
@@ -941,21 +1093,40 @@ function connectSocket() {
     setOnlineMsg(`部屋 ${online.room}：あなたは${colorName(color)}です。`);
     render();
   });
-  // 相手の手は、ルール上指せる手と一致したときだけ反映する
+  // サーバーから届いた手（自分の手も相手の手もここで反映する）。ルール上指せる手と一致したときだけ反映する
   socket.on("move", m => {
-    if (mode !== "online" || online.status !== "playing" || S.winner || S.turn === humanColor) return;
+    if (mode !== "online" || online.status !== "playing" || S.winner) return;
     const legal = m.drop
       ? dropMoves(S.board, S.turn, S.hand[S.turn]).find(d => d.drop === m.drop && d.tx === m.tx && d.ty === m.ty)
       : pieceMoves(S.board, m.fx, m.fy).find(d => d.tx === m.tx && d.ty === m.ty);
     const p = !m.drop && S.board[idx(m.fx, m.fy)];
-    if (!legal || (p && p.c !== S.turn)) { setOnlineMsg("相手から正しくない手が届いたため無視しました。"); return; }
-    doMove(legal, true);
+    if (!legal || (p && p.c !== S.turn)) { setOnlineMsg("正しくない手が届いたため無視しました。"); return; }
+    doMove({ ...legal, keep: m.keep === true }, true);
   });
   socket.on("pass", () => {
-    if (mode !== "online" || online.status !== "playing" || S.winner || S.turn === humanColor) return;
+    if (mode !== "online" || online.status !== "playing" || S.winner) return;
     doPass(true);
   });
   socket.on("rematch-requested", () => setOnlineMsg("相手が再戦を希望しています。「再戦」を押すと始まります。"));
+  // 「一手戻す」の申し込み（undo: "sent"＝自分が申し込み中, "received"＝相手から申し込まれている）
+  socket.on("undo-request", () => {
+    if (mode !== "online" || online.status !== "playing") return;
+    online.undo = "received";
+    playSound("warn");
+    render();
+  });
+  socket.on("undo", ({ color }) => {
+    if (mode !== "online" || !canUndoTo(color)) return;
+    online.undo = null;
+    online.pending = false;
+    rollbackTo(color);
+    setOnlineMsg(`${color === humanColor ? "あなた" : "相手"}の申し込みで一手戻しました。`);
+  });
+  socket.on("undo-rejected", () => {
+    if (online.undo === "sent") setOnlineMsg("相手が「一手戻す」を断りました。");
+    online.undo = null;
+    render();
+  });
   socket.on("opponent-left", () => {
     online.status = "left";
     clearSelection();
@@ -1029,7 +1200,8 @@ function render() {
       const p = S.board[idx(x, y)];
       const cls = ["cell"];
       if ((x + y) % 2) cls.push("alt");
-      if (targets.some(m => m.tx === x && m.ty === y)) cls.push("target", ...(p ? ["capture"] : []));
+      const t = targets.find(m => m.tx === x && m.ty === y);
+      if (t) cls.push("target", ...(p ? ["capture"] : []), ...(t.risky ? ["risky"] : []));
       if (rexInDanger && rexInDanger.x === x && rexInDanger.y === y) cls.push("danger");
       el.className = cls.join(" ");
       if (p) {
@@ -1058,11 +1230,17 @@ function render() {
   } else if (S.winner) {
     st.innerHTML = `<span class="chip ${S.winner}"></span>${colorName(S.winner)}の勝利！`;
     sub.className = "sub";
-    sub.textContent = `${colorName(other(S.winner))}のレックスが取られました。`;
+    sub.textContent = S.winReason === "points"
+      ? `${POINT_JUDGE_PLY}手に達しても決着しなかったため、ポイントで判定しました。`
+      : `${colorName(other(S.winner))}のレックスが取られました。`;
   } else {
-    const who = S.turn === humanColor ? "（あなた）" : mode === "cpu" ? "（CPU思考中…）" : "（相手の番）";
+    const who = mode === "watch" ? `（CPU：${LEVEL_NAME[watch.levels[S.turn]]}）`
+      : S.turn === humanColor ? "（あなた）" : mode === "cpu" ? "（CPU思考中…）" : "（相手の番）";
     st.innerHTML = `<span class="chip ${S.turn}"></span>${colorName(S.turn)}の手番${who}`;
-    if (rexInDanger) {
+    if (mode === "watch" && watch.paused) {
+      sub.className = "sub";
+      sub.textContent = "一時停止中（「再開」で続きを見られます）";
+    } else if (rexInDanger) {
       sub.className = "sub warn";
       sub.textContent = "⚠ レックスが狙われています";
     } else {
@@ -1071,14 +1249,42 @@ function render() {
     }
   }
 
+  // ポイントと手数
+  const plies = S.log.length;
+  const judgeNote = S.winner ? ""
+    : plies >= POINT_JUDGE_PLY ? "｜同点のため、差がつくまで続行中"
+    : `｜${POINT_JUDGE_PLY}手でポイント判定`;
+  $("scoreLine").innerHTML =
+    `ポイント <span class="chip w"></span>白 <b>${fmtPoint(S.points.w)}</b> ／ <span class="chip b"></span>黒 <b>${fmtPoint(S.points.b)}</b>` +
+    `<br>${plies}手${judgeNote}`;
+
+  const watching = mode === "watch";
+  $("passBtn").hidden = $("undoBtn").hidden = watching;
+  $("pauseBtn").hidden = $("speedSel").hidden = !watching;
+  $("pauseBtn").textContent = watch.paused ? "再開" : "一時停止";
+  $("pauseBtn").disabled = !!S.winner;
   $("passBtn").disabled = !canAct();
-  $("undoBtn").disabled = mode === "online" || undoStack.length === 0;
+  $("undoBtn").disabled = mode === "online"
+    ? online.status !== "playing" || !!online.undo || !canUndoTo(humanColor)
+    : undoStack.length === 0;
+  $("undoPrompt").hidden = !(mode === "online" && online.undo === "received");
+  // 対局が終わったら勝敗に関係なく「再戦」を出す（オンラインは2人とも押すと始まる）
+  $("rematchBtn").hidden = !S.winner || (mode === "online" && online.status !== "playing");
+  $("rematchBtn").disabled = mode === "online" && online.rematchSent;
   $("joinBtn").disabled = !!online.room;
-  $("gameTitle").textContent = mode === "cpu" ? "CPU対戦" : `オンライン対戦${online.room ? `（部屋 ${online.room}）` : ""}`;
-  $("newBtn").hidden = mode !== "cpu";
-  $("rematchBtn").hidden = mode !== "online";
+  $("gameTitle").textContent = mode === "cpu" ? "CPU対戦"
+    : watching ? "CPU vs CPU（観戦）"
+    : `オンライン対戦${online.room ? `（部屋 ${online.room}）` : ""}`;
+  // 自分の陣営（オンラインで色が決まる前と、観戦中は出さない）
+  const badge = $("sideBadge");
+  badge.hidden = watching || (mode === "online" && online.status === "waiting");
+  badge.className = `side-badge ${humanColor}`;
+  const mineAtBottom = (humanColor === "w") !== flipped;
+  badge.textContent = `あなた：${colorName(humanColor)}（${mineAtBottom ? "手前" : "奥"}側）`;
+  $("headerSub").textContent = mode === "cpu" ? "13×13盤・CPU対戦 ／ 盤の端は反対側とつながっています（点線）"
+    : watching ? "13×13盤・CPU vs CPU（観戦） ／ 盤の端は反対側とつながっています（点線）"
+    : "オンライン対戦";
   $("onlineMsg").hidden = mode !== "online";
-  $("rematchBtn").disabled = !(mode === "online" && online.status === "playing" && S.winner);
 
   // 持ち駒（あなたの手番のときだけ押せる）
   const handHTML = c => {
@@ -1093,8 +1299,13 @@ function render() {
     }).join("");
     return html || `<span class="note">なし</span>`;
   };
-  $("handMineLabel").textContent = `あなた（${colorName(humanColor)}）`;
-  $("handOppLabel").textContent = `${oppName}（${colorName(other(humanColor))}）`;
+  if (watching) {
+    $("handMineLabel").textContent = `白のCPU（${LEVEL_NAME[watch.levels.w]}）`;
+    $("handOppLabel").textContent = `黒のCPU（${LEVEL_NAME[watch.levels.b]}）`;
+  } else {
+    $("handMineLabel").textContent = `あなた（${colorName(humanColor)}）`;
+    $("handOppLabel").textContent = `${oppName}（${colorName(other(humanColor))}）`;
+  }
   $("handMine").innerHTML = handHTML(humanColor);
   $("handOpp").innerHTML = handHTML(other(humanColor));
 
@@ -1149,6 +1360,14 @@ function renderInfo() {
 
 $("passBtn").addEventListener("click", () => { if (canAct()) doPass(); });
 $("cpuStartBtn").addEventListener("click", () => { newGame(); showScreen("play"); });
+$("watchStartBtn").addEventListener("click", () => { newWatchGame(); showScreen("play"); });
+$("pauseBtn").addEventListener("click", () => {
+  watch.paused = !watch.paused;
+  if (watch.paused) clearTimeout(cpuTimer);
+  render();
+  maybeCpu();
+});
+$("speedSel").addEventListener("change", () => { watch.speed = $("speedSel").value; });
 $("joinBtn").addEventListener("click", joinRoom);
 $("roomInput").addEventListener("keydown", e => { if (e.key === "Enter") joinRoom(); });
 $("homeBtn").addEventListener("click", () => {
@@ -1158,13 +1377,25 @@ $("homeBtn").addEventListener("click", () => {
   showScreen("home");
 });
 $("rematchBtn").addEventListener("click", () => {
+  if (mode === "cpu") { newGame(); return; }        // CPU対戦は同じ設定ですぐ始める
+  if (mode === "watch") { newWatchGame(); return; }  // 観戦も同じ設定でもう一局
   socket.emit("rematch");
-  $("rematchBtn").disabled = true;
+  online.rematchSent = true;
   setOnlineMsg("再戦を申し込みました。相手が「再戦」を押すと始まります。");
+  render();
 });
 $("undoBtn").addEventListener("click", undo);
-$("flipBtn").addEventListener("click", () => { flipped = !flipped; render(); });
-$("newBtn").addEventListener("click", newGame);
+$("undoAcceptBtn").addEventListener("click", () => {
+  socket.emit("undo-accept");
+  online.undo = null;
+  render();
+});
+$("undoRejectBtn").addEventListener("click", () => {
+  socket.emit("undo-reject");
+  online.undo = null;
+  setOnlineMsg("「一手戻す」を断りました。");
+  render();
+});
 document.querySelectorAll(".se-toggle").forEach(b => b.addEventListener("click", () => {
   soundOn = !soundOn;
   try { localStorage.setItem("tsarfil-sound", soundOn ? "on" : "off"); } catch {}
