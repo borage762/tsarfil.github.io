@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ツァーフィル</title>
+<style>
+  :root {
+    --bg: #f3efe6;
+    --panel: #fffdf8;
+    --text: #2b2620;
+    --muted: #7a7064;
+    --line: #d8cfbf;
+    --sq-a: #e9dcc0;
+    --sq-b: #dccaa5;
+    --edge: #8a6f45;
+    --accent: #2f6fbd;
+    --danger: #c0392b;
+    --capture: rgba(214, 64, 48, .55);
+    --dot: rgba(47, 111, 189, .7);
+    --w-fill: #fbf8f1;
+    --w-text: #3a2f22;
+    --b-fill: #2d2a27;
+    --b-text: #f1ebe0;
+    --gold: #c99a2e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1b1916;
+      --panel: #26231f;
+      --text: #ece6dc;
+      --muted: #a39887;
+      --line: #3d3832;
+      --sq-a: #5b4d3a;
+      --sq-b: #4c402f;
+      --edge: #a88a5a;
+      --accent: #6aa5ee;
+      --danger: #ff6b5b;
+      --capture: rgba(255, 96, 80, .50);
+      --dot: rgba(140, 190, 255, .8);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
+    font-size: 14px;
+  }
+  header {
+    padding: 12px 16px 0;
+    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  }
+  header h1 { margin: 0; font-size: 22px; letter-spacing: .08em; }
+  header span { color: var(--muted); font-size: 12px; }
+  main {
+    display: flex; gap: 16px; padding: 12px 16px 24px;
+    align-items: flex-start; flex-wrap: wrap; justify-content: center;
+  }
+  /* ---------- board ---------- */
+  .board-wrap {
+    --size: min(92vw, calc(100vh - 110px), 760px);
+    width: var(--size);
+    display: grid;
+    grid-template-columns: 18px 1fr 18px;
+    grid-template-rows: 18px auto 18px;
+  }
+  .coords { display: grid; color: var(--muted); font-size: 10px; text-align: center; align-items: center; }
+  .coords.h { grid-template-columns: repeat(13, 1fr); }
+  .coords.v { grid-template-rows: repeat(13, 1fr); }
+  .board {
+    display: grid;
+    grid-template-columns: repeat(13, 1fr);
+    grid-template-rows: repeat(13, 1fr);
+    aspect-ratio: 1;
+    border: 3px dashed var(--edge);
+    border-radius: 4px;
+    user-select: none;
+  }
+  .cell {
+    position: relative;
+    background: var(--sq-a);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .cell.alt { background: var(--sq-b); }
+  .cell.target::after {
+    content: ""; position: absolute; width: 28%; height: 28%;
+    border-radius: 50%; background: var(--dot); pointer-events: none;
+  }
+  .cell.target.capture::after {
+    inset: 0; width: auto; height: auto; border-radius: 0;
+    background: var(--capture);
+  }
+  .cell.danger { box-shadow: inset 0 0 0 3px var(--danger); }
+  /* 駒は種類ごとに外形の異なるSVG */
+  .piece {
+    position: relative; z-index: 1;
+    width: 90%; height: 90%;
+    overflow: visible;
+    filter: drop-shadow(0 1px 1px rgba(0,0,0,.35));
+    pointer-events: none;
+  }
+  .piece .body { stroke-width: 3; stroke-linejoin: round; }
+  .piece.w .body { fill: var(--w-fill); stroke: #9c8b70; }
+  .piece.b .body { fill: var(--b-fill); stroke: #000; }
+  .piece.rex .body { stroke: var(--gold); stroke-width: 6; }
+  .piece text {
+    font-weight: 700; letter-spacing: -1px;
+    text-anchor: middle; dominant-baseline: central;
+  }
+  .piece.w text { fill: var(--w-text); }
+  .piece.b text { fill: var(--b-text); }
+  .piece.rot { transform: rotate(180deg); }
+  /* ---------- side panel ---------- */
+  aside {
+    width: min(92vw, 340px);
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px 14px;
+  }
+  .card h2 { margin: 0 0 8px; font-size: 13px; color: var(--muted); font-weight: 600; letter-spacing: .05em; }
+  .status { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .status .chip { width: 16px; height: 16px; border-radius: 50%; display: inline-block; }
+  .chip.w { background: var(--w-fill); border: 1.5px solid #9c8b70; }
+  .chip.b { background: var(--b-fill); border: 1.5px solid #000; }
+  .sub { color: var(--muted); font-size: 12px; margin-top: 4px; min-height: 1.2em; }
+  .sub.warn { color: var(--danger); font-weight: 700; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .row + .row { margin-top: 8px; }
+  input[type="text"] { width: 110px; cursor: text; }
+  button, select, input[type="text"] {
+    font: inherit; padding: 6px 12px; border-radius: 6px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--text); cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .hand { display: flex; flex-wrap: wrap; gap: 4px; min-height: 38px; align-items: center; }
+  .hand-piece {
+    position: relative; width: 38px; height: 38px; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 6px; border: 1px solid transparent; background: transparent;
+  }
+  button.hand-piece { border-color: var(--line); }
+  .hand-piece.sel { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 25%, transparent); }
+  .hand-piece .piece { width: 32px; height: 32px; }
+  .hand-piece .count {
+    position: absolute; right: -3px; bottom: -3px; z-index: 2;
+    font-size: 10px; font-weight: 700; line-height: 14px; padding: 0 4px;
+    border-radius: 7px; background: var(--text); color: var(--panel);
+  }
+  .info-name { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+  .info-name .piece { width: 28px; height: 28px; flex: none; }
+  .info-desc { font-size: 12px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+  .info-body { display: flex; gap: 12px; align-items: flex-start; }
+  .diagram {
+    display: grid; grid-template-columns: repeat(7, 14px); grid-template-rows: repeat(7, 14px);
+    gap: 1px; flex: none; background: var(--line); border: 1px solid var(--line);
+  }
+  .diagram div { background: var(--sq-a); display: flex; align-items: center; justify-content: center; font-size: 9px; }
+  .diagram .c { background: var(--gold); }
+  .diagram .n::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+  .diagram .s { background: color-mix(in srgb, var(--accent) 45%, var(--sq-a)); }
+  .diagram .x::after { content: "×"; color: var(--danger); font-weight: 700; font-size: 12px; }
+  .legend { font-size: 11px; color: var(--muted); margin-top: 8px; }
+  .log {
+    max-height: 200px; overflow-y: auto; font-size: 12px;
+    font-variant-numeric: tabular-nums; margin: 0; padding-left: 28px;
+  }
+  .log li { padding: 1px 0; }
+  .log li.cap { color: var(--danger); }
+  .note { font-size: 11px; color: var(--muted); line-height: 1.5; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ツァーフィル</h1>
+  <span>13×13 トーラス盤・CPU対戦／オンライン対戦 ／ 盤の端は反対側とつながっています（点線）</span>
+</header>
+<main>
+  <div class="board-wrap">
+    <div></div><div class="coords h" id="coordTop"></div><div></div>
+    <div class="coords v" id="coordLeft"></div>
+    <div class="board" id="board"></div>
+    <div class="coords v" id="coordRight"></div>
+    <div></div><div class="coords h" id="coordBottom"></div><div></div>
+  </div>
+
+  <aside>
+    <div class="card">
+      <div class="status" id="status"></div>
+      <div class="sub" id="substatus"></div>
+      <div class="row" style="margin-top:10px">
+        <button id="passBtn">パス</button>
+        <button id="undoBtn">一手戻す</button>
+        <button id="flipBtn">盤を反転</button>
+        <button id="soundBtn"></button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>対局</h2>
+      <div class="row">
+        <select id="modeSel">
+          <option value="cpu">CPU対戦</option>
+          <option value="online">オンライン対戦</option>
+        </select>
+      </div>
+      <div id="cpuPanel">
+        <div class="row">
+          <select id="colorSel" title="あなたの色">
+            <option value="w">あなた：白</option>
+            <option value="b">あなた：黒</option>
+          </select>
+          <select id="levelSel" title="CPUの強さ">
+            <option value="easy">CPU：よわい</option>
+            <option value="normal">CPU：ふつう</option>
+            <option value="hard">CPU：つよい</option>
+          </select>
+        </div>
+        <div class="row">
+          <button class="primary" id="newBtn">開始（先手はランダム）</button>
+        </div>
+      </div>
+      <div id="onlinePanel" hidden>
+        <div class="row">
+          <input type="text" id="roomInput" inputmode="numeric" maxlength="8" placeholder="部屋番号">
+          <button class="primary" id="joinBtn">入室</button>
+          <button id="leaveBtn">退室</button>
+        </div>
+        <div class="row">
+          <button id="rematchBtn">再戦</button>
+        </div>
+        <div class="sub" id="onlineMsg">相手と同じ部屋番号（数字1〜8桁）を入力して入室してください。色と先手はランダムで決まります。</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>駒の情報</h2>
+      <div id="info" class="note">駒にカーソルを合わせるか選択すると、動き方を表示します。</div>
+    </div>
+
+    <div class="card">
+      <h2>持ち駒</h2>
+      <div class="note" id="handMineLabel"></div>
+      <div class="hand" id="handMine"></div>
+      <div class="note" id="handOppLabel" style="margin-top:6px"></div>
+      <div class="hand" id="handOpp"></div>
+    </div>
+
+    <div class="card">
+      <h2>棋譜</h2>
+      <ol class="log" id="log"></ol>
+    </div>
+
+    <div class="card note">
+      ※初期配置はルール未決定のため仮配置です（コード先頭の <code>SETUP</code> で変更可）。<br>
+      ※取った駒は持ち駒になり、自分の手番に1手として盤に置けます。置けるのは敵陣（相手の初期配置の4段）以外の空きマスです。<br>
+      ※一周して元のマスに戻る移動はパスと同じ結果になるため、「パス」ボタンで代用しています。<br>
+      ※オンライン対戦は server.js を起動し、http://localhost:3000 から開いたときに使えます。オンラインでは「一手戻す」は使えません。
+    </div>
+  </aside>
+</main>
+
+<!-- server.js から開いたときだけ読み込まれる（ファイルを直接開いた場合は失敗してCPU対戦のみになる） -->
+<script src="/socket.io/socket.io.js"></script>
+<script>
+"use strict";
+
+const N = 13;
+const FILES = "abcdefghijklm";
+
+// ---------- 駒の定義 ----------
+// 方向は [dx, 前方方向のdy]。r: 最大距離（N=任意距離）, m: 'n'=移動・捕獲, 'c'=捕獲のみ
+const ORTH = [[0,1],[0,-1],[1,0],[-1,0]];
+const DIAG = [[1,1],[-1,1],[1,-1],[-1,-1]];
+const ALL8 = ORTH.concat(DIAG);
+
+const TYPES = {
+  rex:      { name: "レックス",       short: "レク", value: 1000,
+              desc: "縦・横・斜めの8方向に1マス。取られると敗北。",
+              moves: [{ d: ALL8, r: 1, m: "n" }] },
+  ritter:   { name: "リッター",       short: "リッ", value: 4,
+              desc: "前方・前方斜め左右の3方向に任意の距離。",
+              moves: [{ d: [[0,1],[1,1],[-1,1]], r: N, m: "n" }] },
+  soldat:   { name: "ゾルダート",     short: "ゾル", value: 1,
+              desc: "前方に1マス（敵駒なら取れる）。前方斜め左右は敵駒がいる時のみ1マス捕獲。",
+              moves: [{ d: [[0,1]], r: 1, m: "n" }, { d: [[1,1],[-1,1]], r: 1, m: "c" }] },
+  schutz:   { name: "シュッツ",       short: "シュ", value: 3,
+              desc: "左右方向に任意の距離。",
+              moves: [{ d: [[1,0],[-1,0]], r: N, m: "n" }] },
+  reiter:   { name: "ライター",       short: "ライ", value: 9,
+              desc: "縦・横・斜めの8方向に任意の距離。",
+              moves: [{ d: ALL8, r: N, m: "n" }] },
+  rechter:  { name: "レヒター",       short: "レヒ", value: 5,
+              desc: "上下左右の4方向に任意の距離。",
+              moves: [{ d: ORTH, r: N, m: "n" }] },
+  winkel:   { name: "ヴィンケル",     short: "ヴィ", value: 4,
+              desc: "斜め4方向に任意の距離。",
+              moves: [{ d: DIAG, r: N, m: "n" }] },
+  waechter: { name: "ヴェヒター",     short: "ヴェ", value: 2,
+              desc: "上下左右に、敵駒がいる時のみ最大2マス移動して捕獲（2マス先なら途中は空き必須）。",
+              moves: [{ d: ORTH, r: 2, m: "c" }] },
+  torw:     { name: "トルヴェヒター", short: "トル", value: 3,
+              desc: "上下左右に敵駒がいる時のみ最大2マス捕獲。斜め4方向は敵駒がいる時のみ1マス捕獲。",
+              moves: [{ d: ORTH, r: 2, m: "c" }, { d: DIAG, r: 1, m: "c" }] },
+  fest:     { name: "フェスト",       short: "フェ", value: 2,
+              desc: "前方・前方斜め左右・後方・後方斜め左右の6方向に1マス。左右には動けない。",
+              moves: [{ d: [[0,1],[1,1],[-1,1],[0,-1],[1,-1],[-1,-1]], r: 1, m: "n" }] },
+  biegen:   { name: "ビーゲン",       short: "ビー", value: 2,
+              desc: "左右と斜め4方向の6方向に1マス。前後には動けない。",
+              moves: [{ d: [[1,0],[-1,0],[1,1],[-1,1],[1,-1],[-1,-1]], r: 1, m: "n" }] },
+};
+
+// ---------- 仮の初期配置（白側。黒は盤の中心で180度回転） ----------
+// y=1（後方）→ y=4（前方）。各行13マス、左(a)から右(m)。
+// X=レックス R=リッター Z=ゾルダート S=シュッツ E=ライター H=レヒター
+// V=ヴィンケル W=ヴェヒター T=トルヴェヒター F=フェスト B=ビーゲン
+const SETUP = {
+  1: "WFBTFBFBFTBFW",
+  2: "HSVETWXWTEVSH",
+  3: "RVSEVHRHVESVR",
+  4: "ZZZZZZRZZZZZZ",
+};
+const CODE = { X: "rex", R: "ritter", Z: "soldat", S: "schutz", E: "reiter", H: "rechter",
+               V: "winkel", W: "waechter", T: "torw", F: "fest", B: "biegen" };
+
+// ---------- 盤面ロジック ----------
+const idx = (x, y) => y * N + x;
+const wrap = v => ((v % N) + N) % N;
+const other = c => (c === "w" ? "b" : "w");
+const colorName = c => (c === "w" ? "白" : "黒");
+const sqName = (x, y) => FILES[x] + (y + 1);
+
+function initialBoard() {
+  const b = new Array(N * N).fill(null);
+  for (const [y, row] of Object.entries(SETUP)) {
+    [...row].forEach((ch, x) => {
+      if (!CODE[ch]) return;
+      b[idx(x, +y)] = { t: CODE[ch], c: "w" };
+      b[idx(N - 1 - x, N - 1 - y)] = { t: CODE[ch], c: "b" };
+    });
+  }
+  return b;
+}
+
+function pieceMoves(b, x, y) {
+  const p = b[idx(x, y)];
+  if (!p) return [];
+  const fwd = p.c === "w" ? 1 : -1;
+  const out = [];
+  for (const g of TYPES[p.t].moves) {
+    for (const [dx, df] of g.d) {
+      const dy = df * fwd;
+      for (let k = 1; k <= g.r; k++) {
+        const tx = wrap(x + dx * k), ty = wrap(y + dy * k);
+        if (tx === x && ty === y) break;          // 一周して元のマス（パスと同じなので除外）
+        const q = b[idx(tx, ty)];
+        if (!q) {
+          if (g.m === "n") out.push({ fx: x, fy: y, tx, ty });
+          continue;                                // 空きマスは通過できる
+        }
+        if (q.c !== p.c) out.push({ fx: x, fy: y, tx, ty });
+        break;                                     // 駒は飛び越えられない
+      }
+    }
+  }
+  return out;
+}
+
+function allMoves(b, color) {
+  const out = [];
+  for (let y = 0; y < N; y++)
+    for (let x = 0; x < N; x++) {
+      const p = b[idx(x, y)];
+      if (p && p.c === color) out.push(...pieceMoves(b, x, y));
+    }
+  return out;
+}
+
+// ---------- 持ち駒を置く ----------
+// 置く手は { drop: 駒の種類, c: 色, tx, ty } で表す
+const CAMP_ROWS = Object.keys(SETUP).map(Number);   // 白の陣（黒の陣は180度回転）
+const inEnemyCamp = (color, y) => CAMP_ROWS.includes(color === "w" ? N - 1 - y : y);
+
+function dropMoves(b, color, hand) {
+  const out = [];
+  for (const t of new Set(hand))
+    for (let y = 0; y < N; y++) {
+      if (inEnemyCamp(color, y)) continue;
+      for (let x = 0; x < N; x++)
+        if (!b[idx(x, y)]) out.push({ drop: t, c: color, tx: x, ty: y });
+    }
+  return out;
+}
+
+function applyMove(b, m) {
+  const nb = b.slice();
+  if (m.drop) {
+    nb[idx(m.tx, m.ty)] = { t: m.drop, c: m.c };
+    return nb;
+  }
+  nb[idx(m.tx, m.ty)] = nb[idx(m.fx, m.fy)];
+  nb[idx(m.fx, m.fy)] = null;
+  return nb;
+}
+
+function findRex(b, color) {
+  const i = b.findIndex(p => p && p.t === "rex" && p.c === color);
+  return i < 0 ? null : { x: i % N, y: Math.floor(i / N) };
+}
+
+function isAttacked(b, x, y, byColor) {
+  return allMoves(b, byColor).some(m => m.tx === x && m.ty === y);
+}
+
+// ---------- 簡易CPU ----------
+// よわい: 6割の確率で完全にランダムな手。それ以外は取れる駒のうち一番価値の高いものを取る
+// ふつう: 3割の確率でランダムな手。それ以外は取れる駒のうち一番価値の高いものを取る
+// つよい: 自分の手で得る駒の価値 − 相手の次の一手で取られうる最大の駒の価値 で評価する
+// 持ち駒があれば、よわい・ふつうは2割の確率でランダムに置く。つよいは置き場所を40か所まで候補に加える
+const RANDOM_RATE = { easy: 0.6, normal: 0.3 };
+const DROP_RATE = 0.2;
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+
+function cpuChoose(b, color, level, hand) {
+  const drops = dropMoves(b, color, hand);
+  if (level !== "hard") {
+    if (drops.length && Math.random() < DROP_RATE) return pick(drops);
+    const moves = allMoves(b, color);
+    if (!moves.length) return drops.length ? pick(drops) : null;
+    if (Math.random() < RANDOM_RATE[level]) return pick(moves);
+    let best = [], bestGain = -1;
+    for (const m of moves) {
+      const tgt = b[idx(m.tx, m.ty)];
+      const gain = tgt ? TYPES[tgt.t].value : 0;
+      if (gain > bestGain) { bestGain = gain; best = [m]; }
+      else if (gain === bestGain) best.push(m);
+    }
+    return best[Math.floor(Math.random() * best.length)];
+  }
+  const opp = other(color);
+  const evalAfter = (nb, gain) => {
+    let threat = 0;
+    for (const o of allMoves(nb, opp)) {
+      const t = nb[idx(o.tx, o.ty)];
+      if (t && TYPES[t.t].value > threat) threat = TYPES[t.t].value;
+    }
+    return gain - threat * 0.9 + Math.random() * 0.4;
+  };
+  for (let i = drops.length - 1; i > 0; i--) {         // 置く手は数が多いのでランダムに40個だけ調べる
+    const j = Math.floor(Math.random() * (i + 1));
+    [drops[i], drops[j]] = [drops[j], drops[i]];
+  }
+  let best = null, bestScore = evalAfter(b, 0) - 0.3;   // パスの評価（少し不利に）
+  for (const m of allMoves(b, color).concat(drops.slice(0, 40))) {
+    const tgt = m.drop ? null : b[idx(m.tx, m.ty)];
+    if (tgt && tgt.t === "rex") return m;
+    const gain = tgt ? TYPES[tgt.t].value : 0;
+    const bonus = m.drop ? 0.2 : (b[idx(m.fx, m.fy)].t === "soldat" ? 0.1 : 0);
+    const s = evalAfter(applyMove(b, m), gain) + bonus;
+    if (s > bestScore) { bestScore = s; best = m; }
+  }
+  return best;   // null ならパス
+}
+
+// ---------- 駒の形（100×100のSVG。上が前方） ----------
+// el: 外形, ty: 文字の縦位置, fs: 文字サイズ
+function starPoints(n, ro, ri) {
+  const pts = [];
+  for (let i = 0; i < n * 2; i++) {
+    const r = i % 2 ? ri : ro, a = Math.PI * i / n - Math.PI / 2;
+    pts.push(`${(50 + r * Math.cos(a)).toFixed(1)},${(50 + r * Math.sin(a)).toFixed(1)}`);
+  }
+  return pts.join(" ");
+}
+const SHAPES = {
+  rex:      { el: `<polygon class="body" points="6,92 6,28 28,48 50,6 72,48 94,28 94,92"/>`, ty: 68 },        // 王冠
+  ritter:   { el: `<polygon class="body" points="50,3 92,30 92,95 8,95 8,30"/>`, ty: 62 },                   // 前を向いた五角形
+  soldat:   { el: `<path class="body" d="M50 8 L74 44 A30 30 0 1 1 26 44 Z"/>`, ty: 62, fs: 24 },           // 前を向いたしずく形
+  schutz:   { el: `<rect class="body" x="3" y="24" width="94" height="52" rx="12"/>`, ty: 50 },              // 横長
+  reiter:   { el: `<polygon class="body" points="30,4 70,4 96,30 96,70 70,96 30,96 4,70 4,30"/>`, ty: 50 }, // 八角形
+  rechter:  { el: `<rect class="body" x="8" y="8" width="84" height="84" rx="4"/>`, ty: 50 },                // 四角
+  winkel:   { el: `<polygon class="body" points="50,2 98,50 50,98 2,50"/>`, ty: 50, fs: 26 },              // ひし形
+  waechter: { el: `<polygon class="body" points="32,3 68,3 68,32 97,32 97,68 68,68 68,97 32,97 32,68 3,68 3,32 32,32"/>`, ty: 50, fs: 28 }, // 十字
+  torw:     { el: `<polygon class="body" points="${starPoints(8, 49, 34)}"/>`, ty: 50, fs: 26 },           // 八方の星
+  fest:     { el: `<polygon class="body" points="50,2 94,25 94,75 50,98 6,75 6,25"/>`, ty: 50 },           // 縦長の六角形
+  biegen:   { el: `<polygon class="body" points="2,50 25,10 75,10 98,50 75,90 25,90"/>`, ty: 50 },         // 横長の六角形
+};
+
+function pieceSVG(p, rot) {
+  const s = SHAPES[p.t];
+  const cls = `piece ${p.c}${p.t === "rex" ? " rex" : ""}${rot ? " rot" : ""}`;
+  return `<svg class="${cls}" viewBox="0 0 100 100">${s.el}` +
+         `<text x="50" y="${s.ty}" font-size="${s.fs || 30}">${TYPES[p.t].short}</text></svg>`;
+}
+
+// ---------- 効果音（Web Audio APIで合成） ----------
+let audioCtx = null;
+let soundOn = true;
+try { soundOn = localStorage.getItem("tsarfil-sound") !== "off"; } catch {}
+
+function getAudio() {
+  if (!audioCtx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    audioCtx = new AC();
+  }
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  return audioCtx;
+}
+
+function tone(freq, start, dur, { type = "sine", vol = 0.2, slide = null } = {}) {
+  const ctx = audioCtx, t = ctx.currentTime + start;
+  const osc = ctx.createOscillator(), gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, t);
+  if (slide) osc.frequency.exponentialRampToValueAtTime(slide, t + dur);
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(vol, t + 0.005);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(t);
+  osc.stop(t + dur + 0.02);
+}
+
+function noise(start, dur, { vol = 0.3, freq = 1500, q = 1 } = {}) {
+  const ctx = audioCtx, t = ctx.currentTime + start;
+  const len = Math.ceil(ctx.sampleRate * dur);
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len) ** 2;
+  const src = ctx.createBufferSource(), filter = ctx.createBiquadFilter(), gain = ctx.createGain();
+  src.buffer = buf;
+  filter.type = "bandpass"; filter.frequency.value = freq; filter.Q.value = q;
+  gain.gain.value = vol;
+  src.connect(filter).connect(gain).connect(ctx.destination);
+  src.start(t);
+}
+
+const SOUNDS = {
+  select:  () => tone(880, 0, 0.06, { type: "triangle", vol: 0.08 }),                       // 駒を選ぶ
+  move:    () => { noise(0, 0.08, { vol: 0.5, freq: 900, q: 2 });                            // 駒を置く「コトッ」
+                   tone(180, 0, 0.12, { vol: 0.25, slide: 120 }); },
+  capture: () => { noise(0, 0.12, { vol: 0.7, freq: 2200, q: 1 });                           // 駒を取る「カンッ」
+                   tone(240, 0, 0.18, { type: "triangle", vol: 0.3, slide: 90 });
+                   tone(120, 0.03, 0.2, { vol: 0.3 }); },
+  pass:    () => { tone(520, 0, 0.1, { type: "triangle", vol: 0.1 });
+                   tone(390, 0.1, 0.14, { type: "triangle", vol: 0.1 }); },
+  warn:    () => { tone(880, 0, 0.12, { type: "square", vol: 0.06 });                        // レックスが狙われている
+                   tone(880, 0.18, 0.12, { type: "square", vol: 0.06 }); },
+  win:     () => [523, 659, 784, 1047].forEach((f, i) =>
+                   tone(f, i * 0.12, i === 3 ? 0.5 : 0.14, { type: "triangle", vol: 0.15 })),
+  lose:    () => [392, 330, 262].forEach((f, i) =>
+                   tone(f, i * 0.18, i === 2 ? 0.5 : 0.2, { type: "triangle", vol: 0.13 })),
+};
+
+function playSound(name) {
+  if (!soundOn) return;
+  try { if (getAudio()) SOUNDS[name](); } catch {}
+}
+
+// 1手ごとの音：基本の音のあと、勝敗またはレックスの危険を知らせる
+function playTurnSounds(base) {
+  playSound(base);
+  if (S.winner) {
+    const lost = S.winner !== humanColor;
+    setTimeout(() => playSound(lost ? "lose" : "win"), 250);
+    return;
+  }
+  const r = findRex(S.board, S.turn);
+  if (r && isAttacked(S.board, r.x, r.y, other(S.turn))) setTimeout(() => playSound("warn"), 220);
+}
+
+function renderSoundBtn() {
+  $("soundBtn").textContent = soundOn ? "効果音：ON" : "効果音：OFF";
+}
+
+// ---------- 状態とUI ----------
+let S;            // 現在の対局状態
+let undoStack = [];
+let selected = null;      // 選択中の盤上の駒 {x, y}
+let selectedDrop = null;  // 選択中の持ち駒の種類
+let targets = [];
+let flipped = false;
+let mode = "cpu";         // "cpu" | "online"
+let humanColor = "w";     // あなたの色
+let cpuLevel = "easy";
+let cpuTimer = null;
+let hoverInfo = null;
+
+// オンライン対戦の状態。status: "idle" | "waiting"（相手待ち） | "playing" | "left"（相手が退室）
+let socket = null;
+let online = { room: null, status: "idle" };
+
+const $ = id => document.getElementById(id);
+const boardEl = $("board");
+const cells = [];
+
+function snapshot() {
+  return { board: S.board.slice(), turn: S.turn, hand: { w: [...S.hand.w], b: [...S.hand.b] },
+           log: [...S.log], last: S.last, winner: S.winner, first: S.first };
+}
+
+function clearSelection() {
+  selected = null; selectedDrop = null; targets = [];
+}
+
+function freshState(first) {
+  return { board: initialBoard(), turn: first, hand: { w: [], b: [] }, log: [], last: null, winner: null, first };
+}
+
+// CPU対戦を始める
+function newGame() {
+  clearTimeout(cpuTimer);
+  leaveRoom();
+  mode = "cpu";
+  humanColor = $("colorSel").value;
+  cpuLevel = $("levelSel").value;
+  S = freshState(Math.random() < 0.5 ? "w" : "b");
+  undoStack = [];
+  clearSelection();
+  flipped = humanColor === "b";
+  render();
+  maybeCpu();
+}
+
+function isCpuTurn() {
+  return mode === "cpu" && S.turn !== humanColor && !S.winner;
+}
+
+// あなたが操作できるか
+function canAct() {
+  return !S.winner && S.turn === humanColor && (mode === "cpu" || online.status === "playing");
+}
+
+// remote: オンライン対戦で相手から届いた手なら true
+function doMove(m, remote = false) {
+  if (mode === "online" && !remote) socket.emit("move", m);
+  undoStack.push(snapshot());
+  const p = m.drop ? { t: m.drop, c: m.c } : S.board[idx(m.fx, m.fy)];
+  const cap = m.drop ? null : S.board[idx(m.tx, m.ty)];
+  if (m.drop) S.hand[p.c].splice(S.hand[p.c].indexOf(m.drop), 1);
+  S.board = applyMove(S.board, m);
+  S.last = m;
+  let text = m.drop
+    ? `${colorName(p.c)} ${TYPES[p.t].name} 打 ${sqName(m.tx, m.ty)}`
+    : `${colorName(p.c)} ${TYPES[p.t].name} ${sqName(m.fx, m.fy)}→${sqName(m.tx, m.ty)}`;
+  if (cap) {
+    S.hand[p.c].push(cap.t);
+    text += ` ×${TYPES[cap.t].name}`;
+  }
+  S.log.push({ text, cap: !!cap });
+  if (cap && cap.t === "rex") S.winner = p.c;
+  else S.turn = other(S.turn);
+  clearSelection();
+  render();
+  playTurnSounds(cap ? "capture" : "move");
+  maybeCpu();
+}
+
+function doPass(remote = false) {
+  if (mode === "online" && !remote) socket.emit("pass");
+  undoStack.push(snapshot());
+  S.log.push({ text: `${colorName(S.turn)} パス`, cap: false });
+  S.last = null;
+  S.turn = other(S.turn);
+  clearSelection();
+  render();
+  playTurnSounds("pass");
+  maybeCpu();
+}
+
+function undo() {
+  if (mode === "online" || !undoStack.length) return;
+  clearTimeout(cpuTimer);
+  S = undoStack.pop();
+  // あなたの手番まで戻す
+  while (S.turn !== humanColor && undoStack.length) S = undoStack.pop();
+  clearSelection();
+  render();
+  maybeCpu();
+}
+
+function maybeCpu() {
+  if (!isCpuTurn()) return;
+  cpuTimer = setTimeout(() => {
+    const m = cpuChoose(S.board, S.turn, cpuLevel, S.hand[S.turn]);
+    m ? doMove(m) : doPass();
+  }, 350);
+}
+
+function onCellClick(x, y) {
+  if (!canAct()) return;
+  const t = targets.find(m => m.tx === x && m.ty === y);
+  if (t) { doMove(t); return; }
+  const p = S.board[idx(x, y)];
+  if (p && p.c === S.turn && !(selected && selected.x === x && selected.y === y)) {
+    clearSelection();
+    selected = { x, y };
+    targets = pieceMoves(S.board, x, y);
+    playSound("select");
+  } else {
+    clearSelection();
+  }
+  render();
+}
+
+function onHandClick(type) {
+  if (!canAct()) return;
+  if (selectedDrop === type) {
+    clearSelection();
+  } else {
+    clearSelection();
+    selectedDrop = type;
+    targets = dropMoves(S.board, S.turn, [type]);
+    playSound("select");
+  }
+  render();
+}
+
+// ---------- オンライン対戦 ----------
+function setOnlineMsg(text) {
+  $("onlineMsg").textContent = text;
+}
+
+function connectSocket() {
+  socket = io();
+  socket.on("joined", id => {
+    clearTimeout(cpuTimer);
+    online = { room: id, status: "waiting" };
+    mode = "online";
+    S = freshState("w");
+    undoStack = [];
+    clearSelection();
+    setOnlineMsg(`部屋 ${id} に入室しました。相手が同じ番号で入室すると対局が始まります。`);
+    render();
+  });
+  socket.on("waiting", () => { online.status = "waiting"; render(); });
+  socket.on("join-error", msg => setOnlineMsg(msg));
+  socket.on("start", ({ color, first }) => {
+    clearTimeout(cpuTimer);
+    mode = "online";
+    online.status = "playing";
+    humanColor = color;
+    S = freshState(first);
+    undoStack = [];
+    clearSelection();
+    flipped = color === "b";
+    setOnlineMsg(`部屋 ${online.room}：あなたは${colorName(color)}です。`);
+    render();
+  });
+  // 相手の手は、ルール上指せる手と一致したときだけ反映する
+  socket.on("move", m => {
+    if (mode !== "online" || online.status !== "playing" || S.winner || S.turn === humanColor) return;
+    const legal = m.drop
+      ? dropMoves(S.board, S.turn, S.hand[S.turn]).find(d => d.drop === m.drop && d.tx === m.tx && d.ty === m.ty)
+      : pieceMoves(S.board, m.fx, m.fy).find(d => d.tx === m.tx && d.ty === m.ty);
+    const p = !m.drop && S.board[idx(m.fx, m.fy)];
+    if (!legal || (p && p.c !== S.turn)) { setOnlineMsg("相手から正しくない手が届いたため無視しました。"); return; }
+    doMove(legal, true);
+  });
+  socket.on("pass", () => {
+    if (mode !== "online" || online.status !== "playing" || S.winner || S.turn === humanColor) return;
+    doPass(true);
+  });
+  socket.on("rematch-requested", () => setOnlineMsg("相手が再戦を希望しています。「再戦」を押すと始まります。"));
+  socket.on("opponent-left", () => {
+    online.status = "left";
+    clearSelection();
+    setOnlineMsg(`相手が退室しました。部屋 ${online.room} で新しい相手を待っています。`);
+    render();
+  });
+  socket.on("disconnect", () => {
+    if (!online.room) return;
+    online = { room: null, status: "idle" };
+    setOnlineMsg("サーバーとの接続が切れました。もう一度入室してください。");
+    render();
+  });
+}
+
+function joinRoom() {
+  if (typeof io === "undefined") {
+    setOnlineMsg("オンライン対戦は server.js を起動し、http://localhost:3000 から開いたときに使えます。");
+    return;
+  }
+  const id = $("roomInput").value.trim();
+  if (!/^\d{1,8}$/.test(id)) { setOnlineMsg("部屋番号は1〜8桁の数字で入力してください。"); return; }
+  if (!socket) connectSocket();
+  socket.emit("join", id);
+}
+
+function leaveRoom() {
+  if (!online.room) return;
+  socket.emit("leave");
+  online = { room: null, status: "idle" };
+  setOnlineMsg("退室しました。");
+}
+
+// 表示座標 (行r, 列c) → 盤面座標
+const toBoard = (r, c) => flipped ? { x: N - 1 - c, y: r } : { x: c, y: N - 1 - r };
+
+function buildBoard() {
+  for (let r = 0; r < N; r++)
+    for (let c = 0; c < N; c++) {
+      const el = document.createElement("div");
+      el.className = "cell";
+      el.addEventListener("click", () => { const { x, y } = toBoard(r, c); onCellClick(x, y); });
+      el.addEventListener("mouseenter", () => {
+        const { x, y } = toBoard(r, c);
+        const p = S.board[idx(x, y)];
+        hoverInfo = p ? p : null;
+        renderInfo();
+      });
+      el.addEventListener("mouseleave", () => { hoverInfo = null; renderInfo(); });
+      boardEl.appendChild(el);
+      cells.push(el);
+    }
+}
+
+function renderCoords() {
+  const files = [...FILES].map((f, i) => flipped ? FILES[N - 1 - i] : f);
+  const ranks = Array.from({ length: N }, (_, r) => flipped ? r + 1 : N - r);
+  for (const id of ["coordTop", "coordBottom"]) $(id).innerHTML = files.map(f => `<div>${f}</div>`).join("");
+  for (const id of ["coordLeft", "coordRight"]) $(id).innerHTML = ranks.map(n => `<div>${n}</div>`).join("");
+}
+
+function render() {
+  const rexInDanger = !S.winner && (() => {
+    const r = findRex(S.board, S.turn);
+    return r && isAttacked(S.board, r.x, r.y, other(S.turn)) ? r : null;
+  })();
+
+  for (let r = 0; r < N; r++)
+    for (let c = 0; c < N; c++) {
+      const { x, y } = toBoard(r, c);
+      const el = cells[r * N + c];
+      const p = S.board[idx(x, y)];
+      const cls = ["cell"];
+      if ((x + y) % 2) cls.push("alt");
+      if (targets.some(m => m.tx === x && m.ty === y)) cls.push("target", ...(p ? ["capture"] : []));
+      if (rexInDanger && rexInDanger.x === x && rexInDanger.y === y) cls.push("danger");
+      el.className = cls.join(" ");
+      if (p) {
+        const rot = (p.c === "b") !== flipped;
+        el.innerHTML = pieceSVG(p, rot);
+        el.title = `${colorName(p.c)} ${TYPES[p.t].name}（${sqName(x, y)}）`;
+      } else {
+        el.innerHTML = "";
+        el.title = sqName(x, y);
+      }
+    }
+
+  renderCoords();
+
+  // ステータス
+  const st = $("status"), sub = $("substatus");
+  const oppName = mode === "cpu" ? "CPU" : "相手";
+  if (mode === "online" && online.status === "waiting") {
+    st.textContent = "相手を待っています…";
+    sub.className = "sub";
+    sub.textContent = `部屋 ${online.room}`;
+  } else if (mode === "online" && online.status === "left") {
+    st.textContent = "相手が退室しました";
+    sub.className = "sub";
+    sub.textContent = "新しい相手が入室すると対局が始まります";
+  } else if (S.winner) {
+    st.innerHTML = `<span class="chip ${S.winner}"></span>${colorName(S.winner)}の勝利！`;
+    sub.className = "sub";
+    sub.textContent = `${colorName(other(S.winner))}のレックスが取られました。`;
+  } else {
+    const who = S.turn === humanColor ? "（あなた）" : mode === "cpu" ? "（CPU思考中…）" : "（相手の番）";
+    st.innerHTML = `<span class="chip ${S.turn}"></span>${colorName(S.turn)}の手番${who}`;
+    if (rexInDanger) {
+      sub.className = "sub warn";
+      sub.textContent = "⚠ レックスが狙われています";
+    } else {
+      sub.className = "sub";
+      sub.textContent = S.log.length === 0 ? `先手は${colorName(S.first)}に決まりました（ランダム）` : `${S.log.length}手目まで終了`;
+    }
+  }
+
+  $("passBtn").disabled = !canAct();
+  $("undoBtn").disabled = mode === "online" || undoStack.length === 0;
+  $("joinBtn").disabled = !!online.room;
+  $("leaveBtn").disabled = !online.room;
+  $("rematchBtn").disabled = !(mode === "online" && online.status === "playing" && S.winner);
+
+  // 持ち駒（あなたの手番のときだけ押せる）
+  const handHTML = c => {
+    const counts = {};
+    for (const t of S.hand[c]) counts[t] = (counts[t] || 0) + 1;
+    const active = c === humanColor && canAct();
+    const html = Object.keys(TYPES).filter(t => counts[t]).map(t => {
+      const inner = pieceSVG({ t, c }, false) + (counts[t] > 1 ? `<span class="count">${counts[t]}</span>` : "");
+      return active
+        ? `<button class="hand-piece${selectedDrop === t ? " sel" : ""}" data-t="${t}" title="${TYPES[t].name}を置く">${inner}</button>`
+        : `<div class="hand-piece" title="${TYPES[t].name}">${inner}</div>`;
+    }).join("");
+    return html || `<span class="note">なし</span>`;
+  };
+  $("handMineLabel").textContent = `あなた（${colorName(humanColor)}）`;
+  $("handOppLabel").textContent = `${oppName}（${colorName(other(humanColor))}）`;
+  $("handMine").innerHTML = handHTML(humanColor);
+  $("handOpp").innerHTML = handHTML(other(humanColor));
+
+  // 棋譜
+  const log = $("log");
+  log.innerHTML = S.log.map(l => `<li${l.cap ? ' class="cap"' : ""}>${l.text}</li>`).join("");
+  log.scrollTop = log.scrollHeight;
+
+  renderInfo();
+}
+
+function diagramHTML(type) {
+  // 7×7、中央が駒、上が前方
+  const R = 3, marks = {};
+  for (const g of TYPES[type].moves)
+    for (const [dx, df] of g.d)
+      for (let k = 1; k <= Math.min(g.r, R); k++) {
+        const key = `${dx * k},${df * k}`;
+        marks[key] = g.m === "c" ? "x" : (g.r === N ? "s" : "n");
+      }
+  let html = "";
+  for (let r = R; r >= -R; r--)
+    for (let c = -R; c <= R; c++) {
+      const cls = r === 0 && c === 0 ? "c" : (marks[`${c},${r}`] || "");
+      const arrow = cls === "s" && (Math.abs(c) === R || Math.abs(r) === R) ? "…" : "";
+      html += `<div class="${cls}">${arrow}</div>`;
+    }
+  return `<div class="diagram">${html}</div>`;
+}
+
+function renderInfo() {
+  const p = hoverInfo || (selected && S.board[idx(selected.x, selected.y)])
+            || (selectedDrop && { t: selectedDrop, c: S.turn });
+  const el = $("info");
+  if (!p) {
+    el.className = "note";
+    el.innerHTML = "駒にカーソルを合わせるか選択すると、動き方を表示します。持ち駒を選ぶと、置けるマスに点が付きます。";
+    return;
+  }
+  const t = TYPES[p.t];
+  el.className = "";
+  el.innerHTML = `
+    <div class="info-body">
+      ${diagramHTML(p.t)}
+      <div>
+        <div class="info-name">${pieceSVG(p, false)}${colorName(p.c)}・${t.name}</div>
+        <div class="info-desc">${t.desc}</div>
+      </div>
+    </div>
+    <div class="legend">図は上が前方。● 1マス移動 ／ 青帯 任意距離 ／ × 捕獲のみ</div>`;
+}
+
+$("passBtn").addEventListener("click", () => { if (canAct()) doPass(); });
+$("modeSel").addEventListener("change", () => {
+  const isOnline = $("modeSel").value === "online";
+  $("cpuPanel").hidden = isOnline;
+  $("onlinePanel").hidden = !isOnline;
+});
+$("joinBtn").addEventListener("click", joinRoom);
+$("roomInput").addEventListener("keydown", e => { if (e.key === "Enter") joinRoom(); });
+$("leaveBtn").addEventListener("click", () => { leaveRoom(); newGame(); });
+$("rematchBtn").addEventListener("click", () => {
+  socket.emit("rematch");
+  $("rematchBtn").disabled = true;
+  setOnlineMsg("再戦を申し込みました。相手が「再戦」を押すと始まります。");
+});
+$("undoBtn").addEventListener("click", undo);
+$("flipBtn").addEventListener("click", () => { flipped = !flipped; render(); });
+$("newBtn").addEventListener("click", newGame);
+$("soundBtn").addEventListener("click", () => {
+  soundOn = !soundOn;
+  try { localStorage.setItem("tsarfil-sound", soundOn ? "on" : "off"); } catch {}
+  renderSoundBtn();
+  playSound("select");
+});
+renderSoundBtn();
+$("handMine").addEventListener("click", e => {
+  const btn = e.target.closest(".hand-piece[data-t]");
+  if (btn) onHandClick(btn.dataset.t);
+});
+
+buildBoard();
+newGame();
+</script>
+</body>
+</html>
