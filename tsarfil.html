@@ -23,6 +23,7 @@
     --b-fill: #2d2a27;
     --b-text: #f1ebe0;
     --gold: #c99a2e;
+    --evo: #8e44ad;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -38,6 +39,7 @@
       --danger: #ff6b5b;
       --capture: rgba(255, 96, 80, .50);
       --dot: rgba(140, 190, 255, .8);
+      --evo: #c39bd3;
     }
   }
   * { box-sizing: border-box; }
@@ -77,12 +79,12 @@
     grid-template-rows: 18px auto 18px;
   }
   .coords { display: grid; color: var(--muted); font-size: 10px; text-align: center; align-items: center; }
-  .coords.h { grid-template-columns: repeat(13, 1fr); }
-  .coords.v { grid-template-rows: repeat(13, 1fr); }
+  .coords.h { grid-template-columns: repeat(11, 1fr); }
+  .coords.v { grid-template-rows: repeat(11, 1fr); }
   .board {
     display: grid;
-    grid-template-columns: repeat(13, 1fr);
-    grid-template-rows: repeat(13, 1fr);
+    grid-template-columns: repeat(11, 1fr);
+    grid-template-rows: repeat(11, 1fr);
     aspect-ratio: 1;
     border: 3px dashed var(--edge);
     border-radius: 4px;
@@ -123,6 +125,7 @@
   .piece.w .body { fill: var(--w-fill); stroke: #9c8b70; }
   .piece.b .body { fill: var(--b-fill); stroke: #000; }
   .piece.rex .body { stroke: var(--gold); stroke-width: 6; }
+  .piece.evo .body { stroke: var(--evo); stroke-width: 7; }
   .piece text {
     font-weight: 700; letter-spacing: -1px;
     text-anchor: middle; dominant-baseline: central;
@@ -192,6 +195,7 @@
   }
   .log li { padding: 1px 0; }
   .log li.cap { color: var(--danger); }
+  .log li.evo { color: var(--evo); font-weight: 700; }
   .note { font-size: 11px; color: var(--muted); line-height: 1.5; }
   /* ---------- home ---------- */
   #homeScreen {
@@ -228,7 +232,7 @@
 <!-- ========== ホーム画面 ========== -->
 <div id="homeScreen">
   <h1 class="title">ツァーフィル</h1>
-  <p class="tagline">13×13のつながった盤で戦う、2人用の駒取りゲーム</p>
+  <p class="tagline">11×11のつながった盤で戦う、2人用の駒取りゲーム</p>
   <div class="parade" id="parade"></div>
 
   <div class="home-cards">
@@ -368,8 +372,9 @@
 
     <!-- 6. 補足 -->
     <div class="card note">
-      ※初期配置は案B「真ん中を固める」を採用しています（コードの <code>SETUP</code> で変更可）。<br>
-      ※取った駒は2分の1の確率で持ち駒になり、自分の手番に1手として盤に置けます。置けるのは敵陣（相手の初期配置の4段）以外の空きマスです。<br>
+      ※初期配置はコードの <code>SETUP</code> で変更できます。<br>
+      ※取った駒は2分の1の確率で持ち駒になり、自分の手番に1手として盤に置けます。置けるのは敵陣（相手の初期配置の3段）以外の空きマスです。<br>
+      ※駒が取った駒の価値の合計が5以上になると、自動で進化します（紫の縁取り）。<br>
       ※一周して元のマスに戻る移動はパスと同じ結果になるため、「パス」ボタンで代用しています。<br>
       ※オンライン対戦は server.js を起動し、http://localhost:3000 から開いたときに使えます。オンラインで「一手戻す」をするには相手のOKが必要です。
     </div>
@@ -381,16 +386,17 @@
 <dialog id="rulesDlg">
   <h2>ルール</h2>
   <ul class="rules-list">
-    <li>盤は13×13マス。上下左右の端は反対側とつながっています（ドーナツ状）。端を越えた先も移動距離に数えます。</li>
+    <li>盤は11×11マス。上下左右の端は反対側とつながっています（ドーナツ状）。端を越えた先も移動距離に数えます。</li>
     <li>ただし、レックス・ライター・ヴェヒター・トルヴェヒターは上下の端を越えられません（斜めに上下の端を越える移動もできません）。左右の端は越えられます。</li>
-    <li>各プレイヤーは52個の駒を持ちます。先手はランダムで決まります。</li>
+    <li>各プレイヤーは33個の駒を持ちます。先手はランダムで決まります。</li>
     <li>自分の手番には「駒を1つ動かす」「持ち駒を1つ置く」「パス」のどれかをします。</li>
     <li>移動先に敵駒があれば取れます。味方の駒があるマスには入れません。</li>
     <li>長い距離を動く駒も、途中の駒を飛び越えられません。途中に敵駒があれば、そこで取って止まります。</li>
-    <li>取った駒は2分の1の確率で持ち駒になり、敵陣（相手の初期配置の4段）以外の空きマスに置けます。持ち駒にならなかった駒は盤から消えます。</li>
+    <li>取った駒は2分の1の確率で持ち駒になり、敵陣（相手の初期配置の3段）以外の空きマスに置けます。持ち駒にならなかった駒は盤から消えます。</li>
+    <li>駒ごとに「その駒が取った駒の価値の合計」をためていき、5以上になると自動で進化します（ゾルダート→トルダート、シュッツ→ベトシュッツ、ライバ→リライバ、リッター→ベトリッター、ヴェヒター→トルヴェヒター）。進化した駒は紫の縁取りで表示されます。進化した駒が取られると、進化前の駒として持ち駒になります。</li>
     <li>レックスを選ぶと、動いた先で相手に取られうるマスに大きめの赤丸が付きます。</li>
     <li>レックスは攻撃されているマスにも入れます。レックスを取った側の勝ちで、引き分けはありません。</li>
-    <li>双方にポイントがあります。駒を取ると駒の価値の分プラス、取られると同じだけマイナスになります（ライター9・レヒター5・リッター4・ヴィンケル4・シュッツ3・トルヴェヒター3・ヴェヒター2・フェスト2・ビーゲン2・ゾルダート1）。</li>
+    <li>双方にポイントがあります。駒を取ると駒の価値の分プラス、取られると同じだけマイナスになります（駒の価値は下の一覧を参照）。</li>
     <li>500手に達しても決着がつかなければ、ポイントの多い側の勝ちです。同点なら、差がつくかレックスが取られるまで続けます。</li>
   </ul>
   <h3>駒の動き（図は上が前方。● 1マス移動 ／ 青帯 任意距離 ／ × 捕獲のみ）</h3>
@@ -405,8 +411,8 @@
 <script>
 "use strict";
 
-const N = 13;
-const FILES = "abcdefghijklm";
+const N = 11;
+const FILES = "abcdefghijk";
 
 // ---------- 駒の定義 ----------
 // 方向は [dx, 前方方向のdy]。r: 最大距離（N=任意距離）, m: 'n'=移動・捕獲, 'c'=捕獲のみ
@@ -415,21 +421,26 @@ const ORTH = [[0,1],[0,-1],[1,0],[-1,0]];
 const DIAG = [[1,1],[-1,1],[1,-1],[-1,-1]];
 const ALL8 = ORTH.concat(DIAG);
 
+const LR = [[1,0],[-1,0]];     // 左右
+const UD = [[0,1],[0,-1]];     // 上下（前後）
+const FWD3 = [[0,1],[1,1],[-1,1]];   // 前方・前方斜め左右
+
+// evolved: 進化でしか現れない駒
 const TYPES = {
   rex:      { name: "レックス",       short: "レク", value: 1000,
-              desc: "縦・横・斜めの8方向に1マス。取られると敗北。上下の端は越えられない。",
+              desc: "8方向に1マス。取られると敗北。上下の端は越えられない。",
               moves: [{ d: ALL8, r: 1, m: "n" }], noVWrap: true },
   ritter:   { name: "リッター",       short: "リッ", value: 4,
               desc: "前方・前方斜め左右の3方向に任意の距離。",
-              moves: [{ d: [[0,1],[1,1],[-1,1]], r: N, m: "n" }] },
+              moves: [{ d: FWD3, r: N, m: "n" }] },
   soldat:   { name: "ゾルダート",     short: "ゾル", value: 1,
-              desc: "前方に1マス（敵駒なら取れる）。前方斜め左右は敵駒がいる時のみ1マス捕獲。",
+              desc: "前方に1マス。前方斜め左右は敵駒がいる時のみ1マス捕獲。",
               moves: [{ d: [[0,1]], r: 1, m: "n" }, { d: [[1,1],[-1,1]], r: 1, m: "c" }] },
   schutz:   { name: "シュッツ",       short: "シュ", value: 3,
               desc: "左右方向に任意の距離。",
-              moves: [{ d: [[1,0],[-1,0]], r: N, m: "n" }] },
+              moves: [{ d: LR, r: N, m: "n" }] },
   reiter:   { name: "ライター",       short: "ライ", value: 9,
-              desc: "縦・横・斜めの8方向に任意の距離。上下の端は越えられない。",
+              desc: "8方向に任意の距離。上下の端は越えられない。",
               moves: [{ d: ALL8, r: N, m: "n" }], noVWrap: true },
   rechter:  { name: "レヒター",       short: "レヒ", value: 5,
               desc: "上下左右の4方向に任意の距離。",
@@ -440,31 +451,53 @@ const TYPES = {
   waechter: { name: "ヴェヒター",     short: "ヴェ", value: 2,
               desc: "上下左右に、敵駒がいる時のみ最大2マス移動して捕獲（2マス先なら途中は空き必須）。上下の端は越えられない。",
               moves: [{ d: ORTH, r: 2, m: "c" }], noVWrap: true },
-  torw:     { name: "トルヴェヒター", short: "トル", value: 3,
-              desc: "上下左右に敵駒がいる時のみ最大2マス捕獲。斜め4方向は敵駒がいる時のみ1マス捕獲。上下の端は越えられない。",
-              moves: [{ d: ORTH, r: 2, m: "c" }, { d: DIAG, r: 1, m: "c" }], noVWrap: true },
   fest:     { name: "フェスト",       short: "フェ", value: 2,
-              desc: "前方・前方斜め左右・後方・後方斜め左右の6方向に1マス。左右には動けない。",
+              desc: "前方・前方斜め左右・後方・後方斜め左右の6方向に1マス。",
               moves: [{ d: [[0,1],[1,1],[-1,1],[0,-1],[1,-1],[-1,-1]], r: 1, m: "n" }] },
   biegen:   { name: "ビーゲン",       short: "ビー", value: 2,
-              desc: "左右と斜め4方向の6方向に1マス。前後には動けない。",
+              desc: "左右と斜め4方向の6方向に1マス。",
               moves: [{ d: [[1,0],[-1,0],[1,1],[-1,1],[1,-1],[-1,-1]], r: 1, m: "n" }] },
+  liva:     { name: "ライバ",         short: "ラバ", value: 3,
+              desc: "上下方向に任意の距離。",
+              moves: [{ d: UD, r: N, m: "n" }] },
+  // ---- 進化した駒 ----
+  torw:     { name: "トルヴェヒター", short: "トル", value: 3, evolved: true,
+              desc: "ヴェヒターが進化。上下左右に敵駒がいる時のみ最大2マス捕獲。斜め4方向は敵駒がいる時のみ1マス捕獲。上下の端は越えられない。",
+              moves: [{ d: ORTH, r: 2, m: "c" }, { d: DIAG, r: 1, m: "c" }], noVWrap: true },
+  tordat:   { name: "トルダート",     short: "トダ", value: 2, evolved: true,
+              desc: "ゾルダートが進化。前方に最大2マス。前方斜め左右・左右は敵駒がいる時のみ1マス捕獲。",
+              moves: [{ d: [[0,1]], r: 2, m: "n" }, { d: [[1,1],[-1,1],[1,0],[-1,0]], r: 1, m: "c" }] },
+  betschutz:{ name: "ベトシュッツ",   short: "ベシ", value: 5, evolved: true,
+              desc: "シュッツが進化。左右に任意の距離、上下に1マス。上下2マス先は敵駒がいる時のみ捕獲（途中は空き必須）。",
+              moves: [{ d: LR, r: N, m: "n" }, { d: UD, r: 1, m: "n" }, { d: UD, r: 2, m: "c" }] },
+  riliva:   { name: "リライバ",       short: "リラ", value: 5, evolved: true,
+              desc: "ライバが進化。上下に任意の距離、左右に1マス。左右2マス先は敵駒がいる時のみ捕獲（途中は空き必須）。",
+              moves: [{ d: UD, r: N, m: "n" }, { d: LR, r: 1, m: "n" }, { d: LR, r: 2, m: "c" }] },
+  betritter:{ name: "ベトリッター",   short: "ベリ", value: 6, evolved: true,
+              desc: "リッターが進化。前方・前方斜め左右に任意の距離、左右に1マス。",
+              moves: [{ d: FWD3, r: N, m: "n" }, { d: LR, r: 1, m: "n" }] },
 };
 
+// ---------- 進化 ----------
+// 駒ごとに「その駒が取った駒の価値の合計」（xp）をためる。EVOLVE_POINTS 以上になったら自動で進化する。
+// 進化した駒が取られると、進化前の駒として持ち駒になる（xp も 0 に戻る）
+const EVOLVE = { waechter: "torw", soldat: "tordat", schutz: "betschutz", liva: "riliva", ritter: "betritter" };
+const BASE = Object.fromEntries(Object.entries(EVOLVE).map(([from, to]) => [to, from]));
+const EVOLVE_POINTS = 5;
+
 // ---------- 初期配置（白側。黒は盤の中心で180度回転） ----------
-// y=1（後方）→ y=4（前方）。各行13マス、左(a)から右(m)。
-// X=レックス R=リッター Z=ゾルダート S=シュッツ E=ライター H=レヒター
-// V=ヴィンケル W=ヴェヒター T=トルヴェヒター F=フェスト B=ビーゲン
-// 案B「真ん中を固める」：レックスの前後を守りの駒で囲み、真ん中の列をリッターの通り道にしない。
-// 最後列には後ろ向きに長く動ける駒（レヒター・ライター・ヴィンケル）を置かない（端を越えて初手で取り合わないように）
+// y=1（後方）→ y=3（前方）。各行11マス、左(a)から右(k)。記号はルールの駒の記号に合わせている。
+// A=レックス B=リッター C=ゾルダート D=シュッツ E=ライター F=レヒター
+// G=ヴィンケル H=ヴェヒター J=フェスト K=ビーゲン O=ライバ
+// レックスの前をフェストでふさぎ、真ん中の列を通り道にしない。
+// 最後列には後ろ向きに長く動ける駒（レヒター・ヴィンケル・ライバ）を置かない（端を越えて初手で取り合わないように）
 const SETUP = {
-  1: "SBFWTFRFTWFBS",
-  2: "RHVEBWXWBEVHR",
-  3: "HSVETVRVTEVSH",
-  4: "ZZZZZZFZZZZZZ",
+  1: "DKBEHKHEBKD",
+  2: "GOFHJAJHFOG",
+  3: "CCCCCJCCCCC",
 };
-const CODE = { X: "rex", R: "ritter", Z: "soldat", S: "schutz", E: "reiter", H: "rechter",
-               V: "winkel", W: "waechter", T: "torw", F: "fest", B: "biegen" };
+const CODE = { A: "rex", B: "ritter", C: "soldat", D: "schutz", E: "reiter", F: "rechter",
+               G: "winkel", H: "waechter", J: "fest", K: "biegen", O: "liva" };
 
 // ---------- 盤面ロジック ----------
 const idx = (x, y) => y * N + x;
@@ -508,7 +541,9 @@ function pieceMoves(b, x, y) {
       }
     }
   }
-  return out;
+  // 同じマスへの手が重なる場合（例：ベトシュッツの上1マスと「上2マス先の捕獲」の途中）は1つにまとめる
+  const seen = new Set();
+  return out.filter(m => !seen.has(m.tx * N + m.ty) && seen.add(m.tx * N + m.ty));
 }
 
 function allMoves(b, color) {
@@ -629,11 +664,14 @@ const SHAPES = {
   torw:     { el: `<polygon class="body" points="${starPoints(8, 49, 34)}"/>`, ty: 50, fs: 26 },           // 八方の星
   fest:     { el: `<polygon class="body" points="50,2 94,25 94,75 50,98 6,75 6,25"/>`, ty: 50 },           // 縦長の六角形
   biegen:   { el: `<polygon class="body" points="2,50 25,10 75,10 98,50 75,90 25,90"/>`, ty: 50 },         // 横長の六角形
+  liva:     { el: `<rect class="body" x="24" y="3" width="52" height="94" rx="12"/>`, ty: 50, fs: 22 },   // 縦長（シュッツの縦版）
 };
+// 進化した駒は進化前と同じ形にし、紫の太い縁取りで見分ける（トルヴェヒターは従来どおり星形）
+Object.assign(SHAPES, { tordat: SHAPES.soldat, betschutz: SHAPES.schutz, riliva: SHAPES.liva, betritter: SHAPES.ritter });
 
 function pieceSVG(p, rot) {
   const s = SHAPES[p.t];
-  const cls = `piece ${p.c}${p.t === "rex" ? " rex" : ""}${rot ? " rot" : ""}`;
+  const cls = `piece ${p.c}${p.t === "rex" ? " rex" : ""}${TYPES[p.t].evolved ? " evo" : ""}${rot ? " rot" : ""}`;
   return `<svg class="${cls}" viewBox="0 0 100 100">${s.el}` +
          `<text x="50" y="${s.ty}" font-size="${s.fs || 30}">${TYPES[p.t].short}</text></svg>`;
 }
@@ -698,6 +736,8 @@ const SOUNDS = {
                    tone(880, 0.18, 0.12, { type: "square", vol: 0.06 }); },
   win:     () => [523, 659, 784, 1047].forEach((f, i) =>
                    tone(f, i * 0.12, i === 3 ? 0.5 : 0.14, { type: "triangle", vol: 0.15 })),
+  evolve:  () => [660, 880, 1320].forEach((f, i) =>                                         // 進化「キラーン」
+                   tone(f, i * 0.07, 0.25, { type: "sine", vol: 0.12 })),
   lose:    () => [392, 330, 262].forEach((f, i) =>
                    tone(f, i * 0.18, i === 2 ? 0.5 : 0.2, { type: "triangle", vol: 0.13 })),
 };
@@ -952,23 +992,31 @@ function doMove(m, remote = false) {
   let text = m.drop
     ? `${colorName(p.c)} ${TYPES[p.t].name} 打 ${sqName(m.tx, m.ty)}`
     : `${colorName(p.c)} ${TYPES[p.t].name} ${sqName(m.fx, m.fy)}→${sqName(m.tx, m.ty)}`;
+  let evolvedTo = null;
   if (cap) {
     text += ` ×${TYPES[cap.t].name}`;
     if (cap.t !== "rex") {
-      S.points[p.c] += TYPES[cap.t].value;     // 取った側は駒の価値の分プラス
-      S.points[cap.c] -= TYPES[cap.t].value;   // 取られた側は同じだけマイナス
+      const v = TYPES[cap.t].value;
+      S.points[p.c] += v;     // 取った側は駒の価値の分プラス
+      S.points[cap.c] -= v;   // 取られた側は同じだけマイナス
       const keep = m.keep ?? Math.random() < KEEP_RATE;   // オンラインはサーバーが決めた結果を使う
-      if (keep) S.hand[p.c].push(cap.t);
+      if (keep) S.hand[p.c].push(BASE[cap.t] || cap.t);    // 進化した駒は進化前に戻して持ち駒に
       text += keep ? "（持ち駒に）" : "（持ち駒にならず）";
+      // 取った駒の xp をため、条件を超えたら自動で進化する（盤の駒は書き換えず新しく作る：一手戻す用の記録を壊さないため）
+      const xp = (p.xp || 0) + v;
+      evolvedTo = EVOLVE[p.t] && xp >= EVOLVE_POINTS ? EVOLVE[p.t] : null;
+      S.board[idx(m.tx, m.ty)] = { t: evolvedTo || p.t, c: p.c, xp };
+      if (evolvedTo) text += `／${TYPES[p.t].name}が${TYPES[evolvedTo].name}に進化`;
     }
   }
-  S.log.push({ text, cap: !!cap });
+  S.log.push({ text, cap: !!cap, evo: !!evolvedTo });
   if (cap && cap.t === "rex") { S.winner = p.c; S.winReason = "rex"; }
   else S.turn = other(S.turn);
   checkPointJudge();
   clearSelection();
   render();
   playTurnSounds(cap ? "capture" : "move");
+  if (evolvedTo) setTimeout(() => playSound("evolve"), 180);
   maybeCpu();
 }
 
@@ -1281,8 +1329,8 @@ function render() {
   badge.className = `side-badge ${humanColor}`;
   const mineAtBottom = (humanColor === "w") !== flipped;
   badge.textContent = `あなた：${colorName(humanColor)}（${mineAtBottom ? "手前" : "奥"}側）`;
-  $("headerSub").textContent = mode === "cpu" ? "13×13盤・CPU対戦 ／ 盤の端は反対側とつながっています（点線）"
-    : watching ? "13×13盤・CPU vs CPU（観戦） ／ 盤の端は反対側とつながっています（点線）"
+  $("headerSub").textContent = mode === "cpu" ? "11×11盤・CPU対戦 ／ 盤の端は反対側とつながっています（点線）"
+    : watching ? "11×11盤・CPU vs CPU（観戦） ／ 盤の端は反対側とつながっています（点線）"
     : "オンライン対戦";
   $("onlineMsg").hidden = mode !== "online";
 
@@ -1311,7 +1359,7 @@ function render() {
 
   // 棋譜
   const log = $("log");
-  log.innerHTML = S.log.map(l => `<li${l.cap ? ' class="cap"' : ""}>${l.text}</li>`).join("");
+  log.innerHTML = S.log.map(l => `<li${l.evo ? ' class="evo"' : l.cap ? ' class="cap"' : ""}>${l.text}</li>`).join("");
   log.scrollTop = log.scrollHeight;
 
   renderInfo();
@@ -1324,7 +1372,8 @@ function diagramHTML(type) {
     for (const [dx, df] of g.d)
       for (let k = 1; k <= Math.min(g.r, R); k++) {
         const key = `${dx * k},${df * k}`;
-        marks[key] = g.m === "c" ? "x" : (g.r === N ? "s" : "n");
+        const mark = g.m === "c" ? "x" : (g.r === N ? "s" : "n");
+        if (mark !== "x" || !marks[key]) marks[key] = mark;   // 「移動できる」印を「捕獲のみ」で上書きしない
       }
   let html = "";
   for (let r = R; r >= -R; r--)
@@ -1353,6 +1402,9 @@ function renderInfo() {
       <div>
         <div class="info-name">${pieceSVG(p, false)}${colorName(p.c)}・${t.name}</div>
         <div class="info-desc">${t.desc}</div>
+        <div class="info-desc">価値 ${t.value === 1000 ? "―" : t.value}${
+          EVOLVE[p.t] ? `／進化まで ${p.xp || 0} / ${EVOLVE_POINTS}（→${TYPES[EVOLVE[p.t]].name}）`
+          : t.evolved ? "／進化済み" : ""}</div>
       </div>
     </div>
     <div class="legend">図は上が前方。● 1マス移動 ／ 青帯 任意距離 ／ × 捕獲のみ</div>`;
@@ -1427,7 +1479,8 @@ function buildRules() {
     <div class="piece-row">
       ${diagramHTML(t)}
       <div>
-        <div class="info-name">${pieceSVG({ t, c: "w" }, false)}${info.name}<span class="note">（各${counts[t] || 0}個）</span></div>
+        <div class="info-name">${pieceSVG({ t, c: "w" }, false)}${info.name}<span class="note">（${
+          info.evolved ? "進化で登場" : `各${counts[t] || 0}個`}・価値 ${info.value === 1000 ? "―" : info.value}）</span></div>
         <div class="info-desc">${info.desc}</div>
       </div>
     </div>`).join("");
