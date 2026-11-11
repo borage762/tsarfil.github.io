@@ -2,7 +2,7 @@
 // 起動: npm start（または node server.js）→ ブラウザで http://localhost:3000 を開く
 //
 // サーバーの役割は「部屋番号ごとに2人を組み合わせる」「色と先手をランダムに決める」
-// 「手番の人の指し手だけを相手に中継する」の3つ。
+// 「手番の人の指し手だけを2人に送る」「取った駒が持ち駒になるか（2分の1）を決める」の4つ。
 // 盤面とルールの処理はブラウザ側（tsarfil.html）で行い、受け取った手が正しいかもブラウザ側で確かめる。
 
 const path = require("path");
@@ -11,7 +11,8 @@ const express = require("express");
 const { Server } = require("socket.io");
 
 const PORT = process.env.PORT || 3000;
-const N = 13;
+const N = 11;
+const KEEP_RATE = 0.5;   // 取った駒が持ち駒になる確率
 
 const app = express();
 const server = http.createServer(app);
@@ -20,7 +21,8 @@ const io = new Server(server);
 // ゲーム画面だけを公開する（server.js などのファイルは公開しない）
 app.get("/", (req, res) => res.sendFile(path.join(__dirname, "tsarfil.html")));
 
-// 部屋番号 → { players: [{ id, color, rematch }], turn, started }
+// 部屋番号 → { players: [{ id, color, rematch }], turn, started, undoFrom }
+// undoFrom: 「一手戻す」を申し込んでいる側の色（申し込みがなければ null）
 const rooms = new Map();
 
 const other = c => (c === "w" ? "b" : "w");
@@ -44,6 +46,7 @@ function startGame(roomId) {
   room.players.forEach((p, i) => { p.color = colors[i]; p.rematch = false; });
   room.turn = first;
   room.started = true;
+  room.undoFrom = null;
   for (const p of room.players) io.to(p.id).emit("start", { color: p.color, first });
   console.log(`部屋 ${roomId}: 対局開始（先手 ${first === "w" ? "白" : "黒"}）`);
 }
@@ -93,21 +96,23 @@ io.on("connection", socket => {
     else socket.emit("waiting");
   });
 
-  // 手番の人の手だけを相手に中継する
+  // 手番の人の手だけを、指した本人も含めて2人に送る（2人とも受け取った時点で盤面に反映する）
   function relay(event, payload) {
     const room = myRoom();
     if (!room || !room.started) return;
     const player = me(room);
     if (!player || player.color !== room.turn) return;
     room.turn = other(room.turn);
-    socket.to(roomId).emit(event, payload);
+    room.undoFrom = null;   // 手が進んだら「一手戻す」の申し込みは取り消し
+    io.to(roomId).emit(event, payload);
   }
 
+  // keep: 駒を取った場合に、その駒が持ち駒になるか（2分の1）。駒を取らない手では使われない
   socket.on("move", m => {
     const room = myRoom();
     const player = room && me(room);
     const move = player && cleanMove(m, player.color);
-    if (move) relay("move", move);
+    if (move) relay("move", { ...move, keep: Math.random() < KEEP_RATE });
   });
 
   socket.on("pass", () => relay("pass"));
@@ -119,6 +124,32 @@ io.on("connection", socket => {
     me(room).rematch = true;
     if (room.players.every(p => p.rematch)) startGame(roomId);
     else socket.to(roomId).emit("rematch-requested");
+  });
+
+  // 「一手戻す」は相手がOKしたときだけ行う。戻した後は申し込んだ側の手番になる
+  socket.on("undo-request", () => {
+    const room = myRoom();
+    const player = room && me(room);
+    if (!player || !room.started || room.players.length < 2 || room.undoFrom) return;
+    room.undoFrom = player.color;
+    socket.to(roomId).emit("undo-request");
+  });
+
+  socket.on("undo-accept", () => {
+    const room = myRoom();
+    const player = room && me(room);
+    if (!player || !room.undoFrom || room.undoFrom === player.color) return;
+    room.turn = room.undoFrom;
+    io.to(roomId).emit("undo", { color: room.undoFrom });
+    room.undoFrom = null;
+  });
+
+  socket.on("undo-reject", () => {
+    const room = myRoom();
+    const player = room && me(room);
+    if (!player || !room.undoFrom || room.undoFrom === player.color) return;
+    room.undoFrom = null;
+    io.to(roomId).emit("undo-rejected");
   });
 
   socket.on("leave", leave);
