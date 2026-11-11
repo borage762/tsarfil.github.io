@@ -196,6 +196,15 @@
   .log li { padding: 1px 0; }
   .log li.cap { color: var(--danger); }
   .log li.evo { color: var(--evo); font-weight: 700; }
+  /* ---------- tutorial ---------- */
+  .card.tutorial { border: 2px solid var(--accent); }
+  .tut-title { font-size: 17px; font-weight: 700; margin-bottom: 6px; }
+  .tut-text { font-size: 13px; line-height: 1.8; }
+  .tut-done {
+    margin-top: 10px; padding: 8px 10px; border-radius: 6px; font-size: 13px; line-height: 1.7; font-weight: 700;
+    background: color-mix(in srgb, var(--gold) 22%, transparent);
+  }
+  .cell.goal { box-shadow: inset 0 0 0 4px var(--gold); }
   .note { font-size: 11px; color: var(--muted); line-height: 1.5; }
   /* ---------- home ---------- */
   #homeScreen {
@@ -286,6 +295,7 @@
   </div>
 
   <div class="row home-actions">
+    <button class="primary" id="tutorialBtn">はじめての人へ：チュートリアル</button>
     <button id="rulesBtn">ルール</button>
     <button class="bgm-toggle"></button>
     <button class="se-toggle"></button>
@@ -310,6 +320,18 @@
   </div>
 
   <aside>
+    <!-- チュートリアルのときだけ出す -->
+    <div class="card tutorial" id="tutorialCard" hidden>
+      <h2 id="tutStep"></h2>
+      <div class="tut-title" id="tutTitle"></div>
+      <div class="tut-text" id="tutText"></div>
+      <div class="tut-done" id="tutDone" hidden></div>
+      <div class="row" style="margin-top:10px">
+        <button id="tutRetryBtn">やり直す</button>
+        <button class="primary" id="tutNextBtn">次へ</button>
+      </div>
+    </div>
+
     <!-- 1. 手番と操作 -->
     <div class="card">
       <div class="status" id="status"></div>
@@ -956,6 +978,115 @@ function newWatchGame() {
   maybeCpu();
 }
 
+// ---------- チュートリアル ----------
+// 各ステップは練習用の小さな局面。白（あなた）だけが指し、黒は動かない。
+// pieces: [x, y, 種類, 色, xp], goal: 金の枠で示すマス, check: 手を指した後にクリアしたか
+const TUTORIAL = [
+  {
+    title: "駒を動かす",
+    text: "駒をクリックすると、動けるマスに青い点が出ます。白のレヒター（四角い駒）を選んで、金色の枠のマス（c7）へ動かしてみよう。レヒターは上下左右にどこまでも進めます。",
+    pieces: [[2, 2, "rechter", "w"]],
+    goal: [[2, 6]],
+    check: m => m.tx === 2 && m.ty === 6,
+    done: "できた！ 駒の動き方は種類ごとに違います。駒にカーソルを合わせると、右の「駒の情報」に動き方が出ます。",
+  },
+  {
+    title: "駒を取る",
+    text: "動ける先に敵の駒があると、そのマスが赤くなり、取ることができます。白のヴィンケル（ひし形の駒・斜めに進む）で、黒のゾルダートを取ろう。",
+    pieces: [[2, 2, "winkel", "w"], [5, 5, "soldat", "b"]],
+    goal: [[5, 5]],
+    check: m => m.tx === 5 && m.ty === 5,
+    done: "取れた！ 駒を取ると、その駒の価値の分だけポイントが入ります。",
+  },
+  {
+    title: "盤の端はつながっている",
+    text: "この盤は、右の端から出ると左の端から出てきます（上と下も同じ）。シュッツ（横長の駒）は左右にどこまでも進めます。右はフェストでふさがっているので、左へ進んで端を越え、黒のゾルダート（j5）を取ろう。",
+    pieces: [[1, 4, "schutz", "w"], [2, 4, "fest", "w"], [9, 4, "soldat", "b"]],
+    goal: [[9, 4]],
+    check: m => m.tx === 9 && m.ty === 4,
+    done: "端を越えて取れた！ 遠くにいるように見える駒も、端の向こうからなら近いことがあります。",
+  },
+  {
+    title: "持ち駒を置く",
+    text: "取った駒は、2分の1の確率で自分の「持ち駒」になります。持ち駒は自分の番に、空いているマスへ置けます（相手の陣地の3段＝8〜10段目には置けません）。右の「持ち駒」からレヒターを押して、好きなマスに置いてみよう。",
+    pieces: [[3, 8, "soldat", "b"], [5, 8, "soldat", "b"], [7, 8, "soldat", "b"]],
+    hand: ["rechter"],
+    goal: [],
+    check: m => !!m.drop,
+    done: "置けた！ 置くことも1手になります。相手の駒をうまく狙える場所に置くのがコツです。",
+  },
+  {
+    title: "進化",
+    text: "駒は、自分で取った駒の価値の合計が5になると進化して強くなります。このゾルダートはあと1ポイント（ゾルダートの価値は1）。斜め前の黒のゾルダートを取って、進化させよう。",
+    pieces: [[4, 4, "soldat", "w", 4], [5, 5, "soldat", "b"]],
+    goal: [[5, 5]],
+    check: () => S.board[idx(5, 5)]?.t === "tordat",
+    done: "進化した！ 紫の縁取りの駒が「トルダート」です。前に2マス進めるようになりました。",
+  },
+  {
+    title: "レックスを取って勝つ",
+    text: "相手のレックス（王冠の形・金色の縁の駒）を取ったら勝ちです。リッター（五角形の駒）は前と斜め前にどこまでも進めます。リッターで黒のレックスを取ろう。",
+    pieces: [[3, 2, "ritter", "w"], [5, 0, "rex", "w"], [6, 5, "rex", "b"], [8, 7, "soldat", "b"]],
+    goal: [[6, 5]],
+    check: () => S.winner === "w",
+    done: "勝ち！ 自分のレックスが狙われると赤い枠で知らせてくれます。守りながら相手のレックスを狙おう。",
+  },
+];
+let tut = { step: 0, cleared: false, finished: false };
+
+const tutorialGoal = () => (tut.finished ? [] : TUTORIAL[tut.step].goal);
+
+function startTutorial(step) {
+  clearTimeout(cpuTimer);
+  leaveRoom();
+  mode = "tutorial";
+  humanColor = "w";
+  flipped = false;
+  tut = { step, cleared: false, finished: false };
+  const def = TUTORIAL[step];
+  S = freshState("w");
+  S.board = new Array(N * N).fill(null);
+  for (const [x, y, t, c, xp] of def.pieces) S.board[idx(x, y)] = { t, c, xp: xp || 0 };
+  S.hand.w = [...(def.hand || [])];
+  undoStack = [];
+  clearSelection();
+  render();
+}
+
+// チュートリアルでは黒は動かないので、手番を白に戻す。課題を達成したら次へ進めるようにする
+function tutorialAfterMove(m) {
+  if (!S.winner) S.turn = "w";
+  if (!tut.cleared && TUTORIAL[tut.step].check(m)) {
+    tut.cleared = true;
+    setTimeout(() => playSound("evolve"), 300);
+  }
+}
+
+function renderTutorial() {
+  const card = $("tutorialCard");
+  card.hidden = mode !== "tutorial";
+  if (card.hidden) return;
+  if (tut.finished) {
+    $("tutStep").textContent = "チュートリアル完了";
+    $("tutTitle").textContent = "おつかれさまでした！";
+    $("tutText").textContent = "これで基本はばっちりです。実際の対局では、33個ずつの駒で戦います。まずはCPUと対戦してみよう。";
+    $("tutDone").hidden = true;
+    $("tutRetryBtn").textContent = "最初からもう一度";
+    $("tutNextBtn").textContent = "CPUと対戦する";
+    $("tutNextBtn").disabled = false;
+    return;
+  }
+  const def = TUTORIAL[tut.step];
+  $("tutStep").textContent = `ステップ ${tut.step + 1} / ${TUTORIAL.length}`;
+  $("tutTitle").textContent = def.title;
+  $("tutText").textContent = def.text;
+  $("tutDone").hidden = !tut.cleared;
+  $("tutDone").textContent = def.done;
+  $("tutRetryBtn").textContent = "やり直す";
+  $("tutNextBtn").textContent = tut.step + 1 < TUTORIAL.length ? "次へ" : "完了";
+  $("tutNextBtn").disabled = !tut.cleared;
+}
+
 function isCpuTurn() {
   if (S.winner) return false;
   if (mode === "watch") return !watch.paused;
@@ -965,7 +1096,7 @@ function isCpuTurn() {
 // あなたが操作できるか（観戦中は操作できない）
 function canAct() {
   return !S.winner && S.turn === humanColor
-    && (mode === "cpu" || (mode === "online" && online.status === "playing" && !online.pending));
+    && (mode === "cpu" || mode === "tutorial" || (mode === "online" && online.status === "playing" && !online.pending));
 }
 
 // 取った駒が持ち駒になる確率
@@ -999,7 +1130,8 @@ function doMove(m, remote = false) {
       const v = TYPES[cap.t].value;
       S.points[p.c] += v;     // 取った側は駒の価値の分プラス
       S.points[cap.c] -= v;   // 取られた側は同じだけマイナス
-      const keep = m.keep ?? Math.random() < KEEP_RATE;   // オンラインはサーバーが決めた結果を使う
+      // オンラインはサーバーが決めた結果を使う。チュートリアルは説明しやすいように必ず持ち駒にする
+      const keep = m.keep ?? (mode === "tutorial" || Math.random() < KEEP_RATE);
       if (keep) S.hand[p.c].push(BASE[cap.t] || cap.t);    // 進化した駒は進化前に戻して持ち駒に
       text += keep ? "（持ち駒に）" : "（持ち駒にならず）";
       // 取った駒の xp をため、条件を超えたら自動で進化する（盤の駒は書き換えず新しく作る：一手戻す用の記録を壊さないため）
@@ -1013,6 +1145,7 @@ function doMove(m, remote = false) {
   if (cap && cap.t === "rex") { S.winner = p.c; S.winReason = "rex"; }
   else S.turn = other(S.turn);
   checkPointJudge();
+  if (mode === "tutorial") tutorialAfterMove(m);
   clearSelection();
   render();
   playTurnSounds(cap ? "capture" : "move");
@@ -1251,6 +1384,7 @@ function render() {
       const t = targets.find(m => m.tx === x && m.ty === y);
       if (t) cls.push("target", ...(p ? ["capture"] : []), ...(t.risky ? ["risky"] : []));
       if (rexInDanger && rexInDanger.x === x && rexInDanger.y === y) cls.push("danger");
+      if (mode === "tutorial" && !tut.cleared && tutorialGoal().some(([gx, gy]) => gx === x && gy === y)) cls.push("goal");
       el.className = cls.join(" ");
       if (p) {
         const rot = (p.c === "b") !== flipped;
@@ -1267,6 +1401,7 @@ function render() {
   // ステータス
   const st = $("status"), sub = $("substatus");
   const oppName = mode === "cpu" ? "CPU" : "相手";
+  const tutorial = mode === "tutorial";
   if (mode === "online" && online.status === "waiting") {
     st.textContent = "相手を待っています…";
     sub.className = "sub";
@@ -1305,9 +1440,11 @@ function render() {
   $("scoreLine").innerHTML =
     `ポイント <span class="chip w"></span>白 <b>${fmtPoint(S.points.w)}</b> ／ <span class="chip b"></span>黒 <b>${fmtPoint(S.points.b)}</b>` +
     `<br>${plies}手${judgeNote}`;
+  $("scoreLine").hidden = tutorial;
+  renderTutorial();
 
   const watching = mode === "watch";
-  $("passBtn").hidden = $("undoBtn").hidden = watching;
+  $("passBtn").hidden = $("undoBtn").hidden = watching || tutorial;
   $("pauseBtn").hidden = $("speedSel").hidden = !watching;
   $("pauseBtn").textContent = watch.paused ? "再開" : "一時停止";
   $("pauseBtn").disabled = !!S.winner;
@@ -1317,11 +1454,12 @@ function render() {
     : undoStack.length === 0;
   $("undoPrompt").hidden = !(mode === "online" && online.undo === "received");
   // 対局が終わったら勝敗に関係なく「再戦」を出す（オンラインは2人とも押すと始まる）
-  $("rematchBtn").hidden = !S.winner || (mode === "online" && online.status !== "playing");
+  $("rematchBtn").hidden = !S.winner || tutorial || (mode === "online" && online.status !== "playing");
   $("rematchBtn").disabled = mode === "online" && online.rematchSent;
   $("joinBtn").disabled = !!online.room;
   $("gameTitle").textContent = mode === "cpu" ? "CPU対戦"
     : watching ? "CPU vs CPU（観戦）"
+    : tutorial ? "チュートリアル"
     : `オンライン対戦${online.room ? `（部屋 ${online.room}）` : ""}`;
   // 自分の陣営（オンラインで色が決まる前と、観戦中は出さない）
   const badge = $("sideBadge");
@@ -1331,6 +1469,7 @@ function render() {
   badge.textContent = `あなた：${colorName(humanColor)}（${mineAtBottom ? "手前" : "奥"}側）`;
   $("headerSub").textContent = mode === "cpu" ? "11×11盤・CPU対戦 ／ 盤の端は反対側とつながっています（点線）"
     : watching ? "11×11盤・CPU vs CPU（観戦） ／ 盤の端は反対側とつながっています（点線）"
+    : tutorial ? "チュートリアル ／ 実際に駒を動かして遊び方を覚えよう"
     : "オンライン対戦";
   $("onlineMsg").hidden = mode !== "online";
 
@@ -1413,6 +1552,13 @@ function renderInfo() {
 $("passBtn").addEventListener("click", () => { if (canAct()) doPass(); });
 $("cpuStartBtn").addEventListener("click", () => { newGame(); showScreen("play"); });
 $("watchStartBtn").addEventListener("click", () => { newWatchGame(); showScreen("play"); });
+$("tutorialBtn").addEventListener("click", () => { startTutorial(0); showScreen("play"); });
+$("tutRetryBtn").addEventListener("click", () => startTutorial(tut.finished ? 0 : tut.step));
+$("tutNextBtn").addEventListener("click", () => {
+  if (tut.finished) { newGame(); return; }                 // 完了画面では「CPUと対戦する」
+  if (tut.step + 1 < TUTORIAL.length) startTutorial(tut.step + 1);
+  else { tut.finished = true; render(); }
+});
 $("pauseBtn").addEventListener("click", () => {
   watch.paused = !watch.paused;
   if (watch.paused) clearTimeout(cpuTimer);
