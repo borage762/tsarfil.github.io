@@ -286,11 +286,16 @@
           <option value="normal" selected>黒：ふつう</option>
           <option value="hard">黒：つよい</option>
         </select>
+        <select id="watchSpeedSel" title="進む速さ">
+          <option value="slow">速さ：ゆっくり</option>
+          <option value="normal" selected>速さ：ふつう</option>
+          <option value="fast">速さ：はやい</option>
+        </select>
       </div>
       <div class="row">
         <button class="primary" id="watchStartBtn">観戦する</button>
       </div>
-      <div class="sub">CPU同士の対戦を眺めます。速さの変更や一時停止は対局中にできます。</div>
+      <div class="sub">CPU同士の対戦を眺めます。観戦画面で「スタート」を押すと始まります。強さ・速さの変更、一時停止、リセットは対局中にもできます。</div>
     </div>
   </div>
 
@@ -340,14 +345,32 @@
       <div class="row" style="margin-top:10px">
         <button id="passBtn">パス</button>
         <button id="undoBtn">一手戻す</button>
-        <!-- 観戦のときだけ出す -->
-        <button id="pauseBtn" hidden>一時停止</button>
-        <select id="speedSel" title="進む速さ" hidden>
-          <option value="slow">速さ：ゆっくり</option>
-          <option value="normal" selected>速さ：ふつう</option>
-          <option value="fast">速さ：はやい</option>
-        </select>
         <button class="primary" id="rematchBtn" hidden>再戦</button>
+      </div>
+      <!-- 観戦のときだけ出す -->
+      <div id="watchControls" hidden>
+        <div class="row" style="margin-top:8px">
+          <button class="primary" id="watchGoBtn">スタート</button>
+          <button id="pauseBtn">一時停止</button>
+          <button id="watchResetBtn">リセット</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <select id="watchWSel" title="白のCPUの強さ">
+            <option value="easy">白：よわい</option>
+            <option value="normal">白：ふつう</option>
+            <option value="hard">白：つよい</option>
+          </select>
+          <select id="watchBSel" title="黒のCPUの強さ">
+            <option value="easy">黒：よわい</option>
+            <option value="normal">黒：ふつう</option>
+            <option value="hard">黒：つよい</option>
+          </select>
+          <select id="speedSel" title="進む速さ">
+            <option value="slow">速さ：ゆっくり</option>
+            <option value="normal">速さ：ふつう</option>
+            <option value="fast">速さ：はやい</option>
+          </select>
+        </div>
       </div>
       <!-- オンライン対戦で相手から「一手戻す」を申し込まれたときに出す -->
       <div id="undoPrompt" hidden>
@@ -912,7 +935,8 @@ let hoverInfo = null;
 // 観戦の設定。levels: 白・黒それぞれのCPUの強さ, speed: 1手ごとの間隔
 const LEVEL_NAME = { easy: "よわい", normal: "ふつう", hard: "つよい" };
 const SPEED_MS = { slow: 1200, normal: 600, fast: 150 };
-let watch = { levels: { w: "normal", b: "normal" }, speed: "normal", paused: false };
+// started: 「スタート」が押されたか（押されるまでは盤を並べた状態で待つ）
+let watch = { levels: { w: "normal", b: "normal" }, speed: "normal", paused: false, started: false };
 
 // オンライン対戦の状態。status: "idle" | "waiting"（相手待ち） | "playing" | "left"（相手が退室）
 let socket = null;
@@ -962,20 +986,26 @@ function newGame() {
   maybeCpu();
 }
 
-// CPU vs CPU の観戦を始める
-function newWatchGame() {
+// ホームの設定で観戦画面を開く（「スタート」を押すまでは始まらない）
+function openWatch() {
+  watch.levels = { w: $("watchWhiteSel").value, b: $("watchBlackSel").value };
+  watch.speed = $("watchSpeedSel").value;
+  resetWatch();
+}
+
+// 盤を初期配置に戻して「スタート」待ちにする。強さ・速さは今の設定のまま
+function resetWatch() {
   clearTimeout(cpuTimer);
   leaveRoom();
   mode = "watch";
   humanColor = "w";
-  watch.levels = { w: $("watchWhiteSel").value, b: $("watchBlackSel").value };
   watch.paused = false;
+  watch.started = false;
   S = freshState(Math.random() < 0.5 ? "w" : "b");
   undoStack = [];
   clearSelection();
   flipped = false;
   render();
-  maybeCpu();
 }
 
 // ---------- チュートリアル ----------
@@ -1089,7 +1119,7 @@ function renderTutorial() {
 
 function isCpuTurn() {
   if (S.winner) return false;
-  if (mode === "watch") return !watch.paused;
+  if (mode === "watch") return watch.started && !watch.paused;
   return mode === "cpu" && S.turn !== humanColor;
 }
 
@@ -1420,7 +1450,10 @@ function render() {
     const who = mode === "watch" ? `（CPU：${LEVEL_NAME[watch.levels[S.turn]]}）`
       : S.turn === humanColor ? "（あなた）" : mode === "cpu" ? "（CPU思考中…）" : "（相手の番）";
     st.innerHTML = `<span class="chip ${S.turn}"></span>${colorName(S.turn)}の手番${who}`;
-    if (mode === "watch" && watch.paused) {
+    if (mode === "watch" && !watch.started) {
+      sub.className = "sub";
+      sub.textContent = `先手は${colorName(S.first)}です。「スタート」を押すと対戦が始まります。`;
+    } else if (mode === "watch" && watch.paused) {
       sub.className = "sub";
       sub.textContent = "一時停止中（「再開」で続きを見られます）";
     } else if (rexInDanger) {
@@ -1445,9 +1478,14 @@ function render() {
 
   const watching = mode === "watch";
   $("passBtn").hidden = $("undoBtn").hidden = watching || tutorial;
-  $("pauseBtn").hidden = $("speedSel").hidden = !watching;
+  $("watchControls").hidden = !watching;
+  $("watchGoBtn").hidden = watch.started;              // 始まる前は「スタート」、始まったら「一時停止／再開」
+  $("pauseBtn").hidden = !watch.started;
   $("pauseBtn").textContent = watch.paused ? "再開" : "一時停止";
   $("pauseBtn").disabled = !!S.winner;
+  $("watchWSel").value = watch.levels.w;
+  $("watchBSel").value = watch.levels.b;
+  $("speedSel").value = watch.speed;
   $("passBtn").disabled = !canAct();
   $("undoBtn").disabled = mode === "online"
     ? online.status !== "playing" || !!online.undo || !canUndoTo(humanColor)
@@ -1551,7 +1589,7 @@ function renderInfo() {
 
 $("passBtn").addEventListener("click", () => { if (canAct()) doPass(); });
 $("cpuStartBtn").addEventListener("click", () => { newGame(); showScreen("play"); });
-$("watchStartBtn").addEventListener("click", () => { newWatchGame(); showScreen("play"); });
+$("watchStartBtn").addEventListener("click", () => { openWatch(); showScreen("play"); });
 $("tutorialBtn").addEventListener("click", () => { startTutorial(0); showScreen("play"); });
 $("tutRetryBtn").addEventListener("click", () => startTutorial(tut.finished ? 0 : tut.step));
 $("tutNextBtn").addEventListener("click", () => {
@@ -1566,6 +1604,15 @@ $("pauseBtn").addEventListener("click", () => {
   maybeCpu();
 });
 $("speedSel").addEventListener("change", () => { watch.speed = $("speedSel").value; });
+$("watchGoBtn").addEventListener("click", () => {
+  watch.started = true;
+  render();
+  maybeCpu();
+});
+$("watchResetBtn").addEventListener("click", resetWatch);
+// 強さは途中で変えると、次の手から反映される
+$("watchWSel").addEventListener("change", () => { watch.levels.w = $("watchWSel").value; render(); });
+$("watchBSel").addEventListener("change", () => { watch.levels.b = $("watchBSel").value; render(); });
 $("joinBtn").addEventListener("click", joinRoom);
 $("roomInput").addEventListener("keydown", e => { if (e.key === "Enter") joinRoom(); });
 $("homeBtn").addEventListener("click", () => {
@@ -1576,7 +1623,7 @@ $("homeBtn").addEventListener("click", () => {
 });
 $("rematchBtn").addEventListener("click", () => {
   if (mode === "cpu") { newGame(); return; }        // CPU対戦は同じ設定ですぐ始める
-  if (mode === "watch") { newWatchGame(); return; }  // 観戦も同じ設定でもう一局
+  if (mode === "watch") { resetWatch(); return; }    // 観戦も同じ設定でもう一局（「スタート」待ちになる）
   socket.emit("rematch");
   online.rematchSent = true;
   setOnlineMsg("再戦を申し込みました。相手が「再戦」を押すと始まります。");
